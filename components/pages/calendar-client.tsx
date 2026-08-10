@@ -7,8 +7,6 @@ import AuthGuard from "@/components/auth-guard";
 import AppHeader from "@/components/app-header";
 import { createClient } from "@/lib/supabase/client";
 
-const APP_MARKER = "__storybrief_lite__";
-
 type CalendarItem = {
   briefId: string;
   ideaId: string;
@@ -112,9 +110,8 @@ export default function CalendarClient() {
 
       const { data: campaigns, error: campaignError } = await supabase
         .from("campaigns")
-        .select("id,brand_id,name,priority_topics")
-        .in("id", campaignIds)
-        .contains("priority_topics", [APP_MARKER]);
+        .select("id,brand_id,name")
+        .in("id", campaignIds);
 
       if (campaignError) throw campaignError;
 
