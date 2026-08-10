@@ -6,7 +6,12 @@ export function getAIModel() {
 }
 
 export async function loadStorytellingKnowledge() {
-  const file = path.join(process.cwd(), "public", "knowledge", "storytelling_knowledge_base.md");
+  const file = path.join(
+    process.cwd(),
+    "public",
+    "knowledge",
+    "storytelling_knowledge_base.md",
+  );
   return fs.readFile(file, "utf8");
 }
 
@@ -14,20 +19,136 @@ export function compactJson(value: unknown) {
   return JSON.stringify(value, null, 2);
 }
 
-function safeJsonParse<T>(text: string): T {
-  const cleaned = text.trim().replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
-  return JSON.parse(cleaned) as T;
+function stripCodeFences(text: string) {
+  return text
+    .trim()
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/```$/i, "")
+    .trim();
 }
 
-function extractInteractionText(payload: any) {
-  const steps = Array.isArray(payload?.steps) ? payload.steps : [];
-  const modelSteps = steps.filter((step: any) => step?.type === "model_output" && Array.isArray(step?.content));
-  const last = modelSteps[modelSteps.length - 1];
-  if (!last) return "";
-  return last.content
-    .filter((item: any) => item?.type === "text" && typeof item?.text === "string")
-    .map((item: any) => item.text)
-    .join("");
+function extractFirstJson(text: string) {
+  const cleaned = stripCodeFences(text);
+
+  // Fast path.
+  try {
+    JSON.parse(cleaned);
+    return cleaned;
+  } catch {}
+
+  // Recover the first balanced JSON object/array from extra prose.
+  const starts = [cleaned.indexOf("{"), cleaned.indexOf("[")]
+    .filter((n) => n >= 0)
+    .sort((a, b) => a - b);
+
+  if (!starts.length) return cleaned;
+
+  const start = starts[0];
+  const opening = cleaned[start];
+  const closing = opening === "{" ? "}" : "]";
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < cleaned.length; i++) {
+    const ch = cleaned[i];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === "\\") {
+        escaped = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (ch === opening) depth++;
+    if (ch === closing) {
+      depth--;
+      if (depth === 0) return cleaned.slice(start, i + 1);
+    }
+  }
+
+  return cleaned;
+}
+
+function parseJson<T>(text: string): T {
+  return JSON.parse(extractFirstJson(text)) as T;
+}
+
+function extractGenerateContentText(payload: any) {
+  const candidates = Array.isArray(payload?.candidates) ? payload.candidates : [];
+  const parts = candidates?.[0]?.content?.parts;
+  if (!Array.isArray(parts)) return "";
+
+  return parts
+    .filter((part: any) => typeof part?.text === "string")
+    .map((part: any) => part.text)
+    .join("")
+    .trim();
+}
+
+async function callGeminiPlainText({
+  apiKey,
+  model,
+  prompt,
+}: {
+  apiKey: string;
+  model: string;
+  prompt: string;
+}) {
+  // Intentionally use the fully supported generateContent API with the
+  // smallest possible request surface. No response schema / response_format
+  // is sent to Gemini, avoiding INVALID_ARGUMENT caused by structured schemas.
+  const endpoint =
+    `https://generativelanguage.googleapis.com/v1beta/models/` +
+    `${encodeURIComponent(model)}:generateContent`;
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": apiKey,
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: prompt }],
+        },
+      ],
+    }),
+    cache: "no-store",
+  });
+
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const message =
+      payload?.error?.message ||
+      payload?.message ||
+      `Gemini request failed (${response.status})`;
+    throw new Error(`Gemini ${response.status}: ${String(message)}`);
+  }
+
+  const text = extractGenerateContentText(payload);
+  if (!text) {
+    const finishReason = payload?.candidates?.[0]?.finishReason;
+    throw new Error(
+      `Gemini tidak mengembalikan teks${finishReason ? ` (${finishReason})` : ""}.`,
+    );
+  }
+
+  return text;
 }
 
 export async function createStructuredJson<T>({
@@ -44,34 +165,66 @@ export async function createStructuredJson<T>({
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) throw new Error("GEMINI_API_KEY belum dikonfigurasi.");
 
-  const response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-goog-api-key": apiKey,
-    },
-    body: JSON.stringify({
-      model: getAIModel(),
-      input: `SYSTEM ROLE\n${system}\n\nUSER TASK\n${user}`,
-      store: false,
-      response_format: {
-        type: "text",
-        mime_type: "application/json",
-        schema,
-      },
-    }),
-    cache: "no-store",
+  const model = getAIModel();
+
+  const contract = JSON.stringify(schema);
+
+  const prompt = `${system}
+
+${user}
+
+=== OUTPUT CONTRACT ===
+Kembalikan HANYA satu JSON valid.
+JANGAN gunakan markdown.
+JANGAN gunakan code fence.
+JANGAN menulis komentar sebelum atau sesudah JSON.
+Ikuti struktur/schema ini sedekat mungkin dan isi seluruh field required:
+
+${contract}
+
+Gunakan Bahasa Indonesia untuk seluruh field yang bersifat editorial/content,
+kecuali nama perusahaan, judul sumber, URL, istilah resmi, atau proper noun yang
+lebih tepat dipertahankan dalam bahasa aslinya.`;
+
+  const firstText = await callGeminiPlainText({
+    apiKey,
+    model,
+    prompt,
   });
 
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const detail = payload?.error?.message || payload?.message || `Gemini request failed (${response.status})`;
-    throw new Error(String(detail));
-  }
+  try {
+    return parseJson<T>(firstText);
+  } catch {
+    // One repair pass if the model adds malformed JSON despite the contract.
+    const repairPrompt = `Perbaiki output berikut menjadi SATU JSON valid.
 
-  const text = extractInteractionText(payload);
-  if (!text) throw new Error("Gemini tidak mengembalikan structured output.");
-  return safeJsonParse<T>(text);
+ATURAN:
+- Hanya JSON.
+- Tanpa markdown atau code fence.
+- Jangan menambah penjelasan.
+- Pertahankan isi/fakta semaksimal mungkin.
+- Sesuaikan dengan schema berikut.
+
+SCHEMA:
+${contract}
+
+OUTPUT YANG HARUS DIPERBAIKI:
+${firstText}`;
+
+    const repairedText = await callGeminiPlainText({
+      apiKey,
+      model,
+      prompt: repairPrompt,
+    });
+
+    try {
+      return parseJson<T>(repairedText);
+    } catch {
+      throw new Error(
+        "Gemini berhasil merespons tetapi JSON belum valid setelah 1x repair. Silakan generate ulang.",
+      );
+    }
+  }
 }
 
 export function clampScore(value: number) {
