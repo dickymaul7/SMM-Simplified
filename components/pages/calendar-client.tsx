@@ -7,6 +7,8 @@ import AuthGuard from "@/components/auth-guard";
 import AppHeader from "@/components/app-header";
 import { createClient } from "@/lib/supabase/client";
 
+const APP_MARKER = "__storybrief_lite__";
+
 type CalendarItem = {
   briefId: string;
   ideaId: string;
@@ -19,6 +21,8 @@ type CalendarItem = {
   scheduledFor: string;
   humanQcStatus: string | null;
   score: number;
+  designStatus: "ready_to_design" | "designed";
+  designFileUrl: string | null;
 };
 
 const weekdayLabels = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
@@ -57,6 +61,8 @@ export default function CalendarClient() {
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [quickMoveDate, setQuickMoveDate] = useState("");
+  const [designFileUrl, setDesignFileUrl] = useState("");
+  const [designSaving, setDesignSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -69,7 +75,7 @@ export default function CalendarClient() {
 
       const { data: briefs, error: briefError } = await supabase
         .from("content_briefs")
-        .select("id,content_idea_id,scheduled_for,human_qc_status,final_score,status")
+        .select("id,content_idea_id,scheduled_for,human_qc_status,final_score,status,design_status,design_file_url")
         .not("scheduled_for", "is", null)
         .order("scheduled_for", { ascending: true });
 
@@ -106,8 +112,9 @@ export default function CalendarClient() {
 
       const { data: campaigns, error: campaignError } = await supabase
         .from("campaigns")
-        .select("id,brand_id,name")
-        .in("id", campaignIds);
+        .select("id,brand_id,name,priority_topics")
+        .in("id", campaignIds)
+        .contains("priority_topics", [APP_MARKER]);
 
       if (campaignError) throw campaignError;
 
@@ -149,6 +156,9 @@ export default function CalendarClient() {
           scheduledFor: row.scheduled_for,
           humanQcStatus: row.human_qc_status,
           score: Number(row.final_score || 0),
+          designStatus:
+            row.design_status === "designed" ? "designed" : "ready_to_design",
+          designFileUrl: row.design_file_url || null,
         });
       }
 
@@ -255,8 +265,83 @@ export default function CalendarClient() {
   function chooseItem(item: CalendarItem) {
     setSelectedId(item.briefId);
     setQuickMoveDate(item.scheduledFor);
+    setDesignFileUrl(item.designFileUrl || "");
     setMessage("");
     setError("");
+  }
+
+  async function setDesignStatus(
+    item: CalendarItem,
+    nextStatus: "ready_to_design" | "designed",
+  ) {
+    setDesignSaving(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const supabase = createClient();
+      const { error: updateError } = await supabase
+        .from("content_briefs")
+        .update({ design_status: nextStatus })
+        .eq("id", item.briefId);
+
+      if (updateError) throw updateError;
+
+      setItems((currentItems) =>
+        currentItems.map((current) =>
+          current.briefId === item.briefId
+            ? { ...current, designStatus: nextStatus }
+            : current,
+        ),
+      );
+
+      setMessage(
+        nextStatus === "designed"
+          ? "Status diubah menjadi Designed."
+          : "Status diubah menjadi Ready to Design.",
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal mengubah design status.");
+    } finally {
+      setDesignSaving(false);
+    }
+  }
+
+  async function saveDesignFile(item: CalendarItem) {
+    const value = designFileUrl.trim();
+
+    if (value && !/^https?:\/\//i.test(value)) {
+      setError("Link design harus diawali http:// atau https://");
+      return;
+    }
+
+    setDesignSaving(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const supabase = createClient();
+      const { error: updateError } = await supabase
+        .from("content_briefs")
+        .update({ design_file_url: value || null })
+        .eq("id", item.briefId);
+
+      if (updateError) throw updateError;
+
+      setItems((currentItems) =>
+        currentItems.map((current) =>
+          current.briefId === item.briefId
+            ? { ...current, designFileUrl: value || null }
+            : current,
+        ),
+      );
+
+      setMessage(value ? "Link file design tersimpan." : "Link file design dihapus.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal menyimpan link design.");
+    } finally {
+      setDesignSaving(false);
+    }
   }
 
   function goPreviousMonth() {
@@ -450,6 +535,24 @@ export default function CalendarClient() {
                             >
                               {item.humanQcStatus === "approved" ? "QC ✓" : "QC ulang"}
                             </span>
+
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[9px] font-semibold ${
+                                item.designStatus === "designed"
+                                  ? "bg-violet-50 text-violet-700"
+                                  : "bg-blue-50 text-blue-700"
+                              }`}
+                            >
+                              {item.designStatus === "designed"
+                                ? "Designed ✓"
+                                : "Ready to Design"}
+                            </span>
+
+                            {item.designFileUrl && (
+                              <span className="rounded-full bg-slate-950 px-2 py-0.5 text-[9px] font-semibold text-white">
+                                File ↗
+                              </span>
+                            )}
                           </div>
                         </article>
                       ))}
@@ -504,9 +607,78 @@ export default function CalendarClient() {
                     {movingId === selectedItem.briefId ? "Memindahkan..." : "Pindahkan Tanggal"}
                   </button>
 
+                  <div className="mt-5 border-t border-slate-200 pt-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                          Design Status
+                        </p>
+                        <p
+                          className={`mt-1 text-sm font-bold ${
+                            selectedItem.designStatus === "designed"
+                              ? "text-violet-700"
+                              : "text-blue-700"
+                          }`}
+                        >
+                          {selectedItem.designStatus === "designed"
+                            ? "Designed ✓"
+                            : "Ready to Design"}
+                        </p>
+                      </div>
+
+                      {selectedItem.designStatus === "designed" ? (
+                        <button
+                          onClick={() => setDesignStatus(selectedItem, "ready_to_design")}
+                          disabled={designSaving}
+                          className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                        >
+                          Set Ready
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => setDesignStatus(selectedItem, "designed")}
+                          disabled={designSaving}
+                          className="rounded-xl bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
+                        >
+                          Mark Designed
+                        </button>
+                      )}
+                    </div>
+
+                    <label className="mt-4 block text-xs font-semibold uppercase tracking-wider text-slate-400">
+                      Link File Design
+                    </label>
+                    <input
+                      type="url"
+                      value={designFileUrl}
+                      onChange={(event) => setDesignFileUrl(event.target.value)}
+                      placeholder="Figma / Canva / Google Drive / lainnya"
+                      className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+                    />
+
+                    <button
+                      onClick={() => saveDesignFile(selectedItem)}
+                      disabled={designSaving}
+                      className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      {designSaving ? "Menyimpan..." : "Simpan Link Design"}
+                    </button>
+
+                    {selectedItem.designFileUrl && (
+                      <a
+                        href={selectedItem.designFileUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-2 block w-full rounded-2xl bg-slate-950 px-4 py-3 text-center text-sm font-semibold text-white hover:bg-slate-800"
+                      >
+                        Buka File Design ↗
+                      </a>
+                    )}
+                  </div>
+
                   <button
                     onClick={() => router.push(`/brief/${selectedItem.briefId}`)}
-                    className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold hover:bg-slate-50"
+                    className="mt-4 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold hover:bg-slate-50"
                   >
                     Buka Full Brief →
                   </button>
