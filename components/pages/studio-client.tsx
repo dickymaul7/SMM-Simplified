@@ -7,6 +7,18 @@ import AppHeader from "@/components/app-header";
 import { createClient } from "@/lib/supabase/client";
 
 const APP_MARKER = "__storybrief_lite__";
+const QUICK_BRIEF_DRAFT_KEY = "smm-simplified:quick-brief-draft:v1";
+
+type QuickBriefDraft = {
+  brandName: string;
+  website: string;
+  topic: string;
+  audience: string;
+  objective: string;
+  cta: string;
+  preferredFormat: "auto" | "carousel" | "reels" | "single_post";
+  extraContext: string;
+};
 
 type CampaignRow = {
   id: string;
@@ -24,13 +36,42 @@ export default function StudioClient() {
   const [audience, setAudience] = useState("");
   const [objective, setObjective] = useState("");
   const [cta, setCta] = useState("");
-  const [preferredFormat, setPreferredFormat] = useState<"auto" | "carousel" | "reels" | "single_post">("auto");
+  const [preferredFormat, setPreferredFormat] = useState<
+    "auto" | "carousel" | "reels" | "single_post"
+  >("auto");
   const [extraContext, setExtraContext] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [history, setHistory] = useState<CampaignRow[]>([]);
+  const [draftLoaded, setDraftLoaded] = useState(false);
 
   useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(QUICK_BRIEF_DRAFT_KEY);
+      if (saved) {
+        const draft = JSON.parse(saved) as Partial<QuickBriefDraft>;
+
+        setBrandName(draft.brandName ?? "");
+        setWebsite(draft.website ?? "");
+        setTopic(draft.topic ?? "");
+        setAudience(draft.audience ?? "");
+        setObjective(draft.objective ?? "");
+        setCta(draft.cta ?? "");
+        setPreferredFormat(
+          draft.preferredFormat === "carousel" ||
+            draft.preferredFormat === "reels" ||
+            draft.preferredFormat === "single_post"
+            ? draft.preferredFormat
+            : "auto",
+        );
+        setExtraContext(draft.extraContext ?? "");
+      }
+    } catch {
+      // Ignore corrupted local draft and keep the form usable.
+    } finally {
+      setDraftLoaded(true);
+    }
+
     const supabase = createClient();
     supabase
       .from("campaigns")
@@ -41,18 +82,83 @@ export default function StudioClient() {
       .then(({ data }) => setHistory((data ?? []) as CampaignRow[]));
   }, []);
 
+  useEffect(() => {
+    if (!draftLoaded) return;
+
+    const draft: QuickBriefDraft = {
+      brandName,
+      website,
+      topic,
+      audience,
+      objective,
+      cta,
+      preferredFormat,
+      extraContext,
+    };
+
+    try {
+      window.localStorage.setItem(QUICK_BRIEF_DRAFT_KEY, JSON.stringify(draft));
+    } catch {
+      // Autosave is optional; generation should remain usable.
+    }
+  }, [
+    brandName,
+    website,
+    topic,
+    audience,
+    objective,
+    cta,
+    preferredFormat,
+    extraContext,
+    draftLoaded,
+  ]);
+
+  function clearDraft() {
+    setBrandName("");
+    setWebsite("");
+    setTopic("");
+    setAudience("");
+    setObjective("");
+    setCta("");
+    setPreferredFormat("auto");
+    setExtraContext("");
+    setError("");
+
+    try {
+      window.localStorage.removeItem(QUICK_BRIEF_DRAFT_KEY);
+    } catch {
+      // Ignore browser storage errors.
+    }
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError("");
+
     try {
       const response = await fetch("/api/ai/angles", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brandName, website, topic, audience, objective, cta, preferredFormat, extraContext }),
+        body: JSON.stringify({
+          brandName,
+          website,
+          topic,
+          audience,
+          objective,
+          cta,
+          preferredFormat,
+          extraContext,
+        }),
       });
+
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok || !payload?.ok) throw new Error(payload?.error || "Generate gagal.");
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Generate gagal.");
+      }
+
+      // Important: draft is intentionally NOT cleared here.
+      // User can return to "Buat Brief" without filling everything again.
       router.push(`/campaign/${payload.campaignId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Generate gagal.");
@@ -61,47 +167,120 @@ export default function StudioClient() {
     }
   }
 
-  const inputClass = "w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-50";
+  const inputClass =
+    "w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-50";
 
   return (
     <AuthGuard>
       <AppHeader />
+
       <main className="mx-auto max-w-7xl px-5 py-8 lg:py-12">
         <div className="grid gap-8 lg:grid-cols-[1.2fr_.8fr]">
           <section>
             <div className="max-w-3xl">
-              <div className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">3-step workflow</div>
-              <h1 className="mt-4 text-4xl font-bold tracking-tight text-slate-950 md:text-5xl">Dari 5 input ke storytelling brief yang siap dieksekusi.</h1>
-              <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">Tidak ada Brand Intelligence form panjang. AI membangun konteks internal, mencari kasus nyata via live research, lalu memberi 5 angle case-led.</p>
+              <div className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                3-step workflow
+              </div>
+              <h1 className="mt-4 text-4xl font-bold tracking-tight text-slate-950 md:text-5xl">
+                Dari 5 input ke storytelling brief yang siap dieksekusi.
+              </h1>
+              <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
+                Tidak ada Brand Intelligence form panjang. AI membangun konteks internal, mencari
+                kasus nyata via live research, lalu memberi 5 angle case-led.
+              </p>
             </div>
 
-            <form onSubmit={submit} className="mt-8 space-y-5 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+            <form
+              onSubmit={submit}
+              className="mt-8 space-y-5 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:p-8"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-emerald-50 px-4 py-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
+                    Draft tersimpan otomatis
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-emerald-700/80">
+                    Pindah ke Content Calendar atau membuka brief lain tidak akan menghapus input ini.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={clearDraft}
+                  className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                >
+                  Kosongkan Form
+                </button>
+              </div>
+
               <div>
-                <label className="mb-2 block text-sm font-semibold">1. Brand / perusahaan</label>
+                <label className="mb-2 block text-sm font-semibold">
+                  1. Brand / perusahaan
+                </label>
                 <div className="grid gap-3 md:grid-cols-2">
-                  <input required className={inputClass} value={brandName} onChange={(e) => setBrandName(e.target.value)} placeholder="Contoh: Proxsis Academy" />
-                  <input className={inputClass} value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="Website (opsional)" />
+                  <input
+                    required
+                    className={inputClass}
+                    value={brandName}
+                    onChange={(e) => setBrandName(e.target.value)}
+                    placeholder="Contoh: Proxsis Academy"
+                  />
+                  <input
+                    className={inputClass}
+                    value={website}
+                    onChange={(e) => setWebsite(e.target.value)}
+                    placeholder="Website (opsional)"
+                  />
                 </div>
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-semibold">2. Apa yang ingin dibahas / dipromosikan?</label>
-                <input required className={inputClass} value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Contoh: Webinar ISO 37001 / AI for HR / Leadership" />
+                <label className="mb-2 block text-sm font-semibold">
+                  2. Apa yang ingin dibahas / dipromosikan?
+                </label>
+                <input
+                  required
+                  className={inputClass}
+                  value={topic}
+                  onChange={(e) => setTopic(e.target.value)}
+                  placeholder="Contoh: Webinar ISO 37001 / AI for HR / Leadership"
+                />
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-semibold">3. Siapa audience utamanya?</label>
-                <textarea required className={`${inputClass} min-h-24 resize-y`} value={audience} onChange={(e) => setAudience(e.target.value)} placeholder="Contoh: HR Manager, Head of Compliance, Director, business owner..." />
+                <label className="mb-2 block text-sm font-semibold">
+                  3. Siapa audience utamanya?
+                </label>
+                <textarea
+                  required
+                  className={`${inputClass} min-h-24 resize-y`}
+                  value={audience}
+                  onChange={(e) => setAudience(e.target.value)}
+                  placeholder="Contoh: HR Manager, Head of Compliance, Director, business owner..."
+                />
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-semibold">4. Apa hasil yang ingin dicapai?</label>
-                <textarea required className={`${inputClass} min-h-24 resize-y`} value={objective} onChange={(e) => setObjective(e.target.value)} placeholder="Contoh: membangun awareness bahwa anti-suap perlu dioperasionalkan sebagai sistem, bukan hanya kebijakan." />
+                <label className="mb-2 block text-sm font-semibold">
+                  4. Apa hasil yang ingin dicapai?
+                </label>
+                <textarea
+                  required
+                  className={`${inputClass} min-h-24 resize-y`}
+                  value={objective}
+                  onChange={(e) => setObjective(e.target.value)}
+                  placeholder="Contoh: membangun awareness bahwa anti-suap perlu dioperasionalkan sebagai sistem, bukan hanya kebijakan."
+                />
               </div>
 
               <div>
                 <label className="mb-2 block text-sm font-semibold">5. CTA</label>
-                <input className={inputClass} value={cta} onChange={(e) => setCta(e.target.value)} placeholder="Opsional — contoh: Ikuti webinar / konsultasikan kebutuhan training" />
+                <input
+                  className={inputClass}
+                  value={cta}
+                  onChange={(e) => setCta(e.target.value)}
+                  placeholder="Opsional — contoh: Ikuti webinar / konsultasikan kebutuhan training"
+                />
               </div>
 
               <div>
@@ -113,33 +292,83 @@ export default function StudioClient() {
                     ["reels", "Reels"],
                     ["single_post", "Single Post"],
                   ].map(([value, label]) => (
-                    <button key={value} type="button" onClick={() => setPreferredFormat(value as typeof preferredFormat)} className={`rounded-full px-4 py-2 text-sm font-medium ${preferredFormat === value ? "bg-slate-950 text-white" : "border border-slate-200 bg-white text-slate-700"}`}>{label}</button>
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() =>
+                        setPreferredFormat(value as typeof preferredFormat)
+                      }
+                      className={`rounded-full px-4 py-2 text-sm font-medium ${
+                        preferredFormat === value
+                          ? "bg-slate-950 text-white"
+                          : "border border-slate-200 bg-white text-slate-700"
+                      }`}
+                    >
+                      {label}
+                    </button>
                   ))}
                 </div>
               </div>
 
               <details className="rounded-2xl bg-slate-50 p-4">
-                <summary className="cursor-pointer text-sm font-semibold">Advanced context (opsional)</summary>
-                <textarea className={`${inputClass} mt-4 min-h-28 resize-y`} value={extraContext} onChange={(e) => setExtraContext(e.target.value)} placeholder="Hal yang wajib masuk / wajib dihindari, tone khusus, batasan claim, konteks klien, dll." />
+                <summary className="cursor-pointer text-sm font-semibold">
+                  Advanced context (opsional)
+                </summary>
+                <textarea
+                  className={`${inputClass} mt-4 min-h-28 resize-y`}
+                  value={extraContext}
+                  onChange={(e) => setExtraContext(e.target.value)}
+                  placeholder="Hal yang wajib masuk / wajib dihindari, tone khusus, batasan claim, konteks klien, dll."
+                />
               </details>
 
-              {error && <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+              {error && (
+                <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {error}
+                </div>
+              )}
 
-              <button disabled={loading} className="w-full rounded-2xl bg-blue-600 px-5 py-4 font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50">
-                {loading ? "AI sedang riset kasus & menyusun angle..." : "Cari Kasus & Buat 5 Story Angles →"}
+              <button
+                disabled={loading}
+                className="w-full rounded-2xl bg-blue-600 px-5 py-4 font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
+              >
+                {loading
+                  ? "AI sedang riset kasus & menyusun angle..."
+                  : "Cari Kasus & Buat 5 Story Angles →"}
               </button>
-              <p className="text-center text-xs leading-5 text-slate-400">Live research + evidence selection + hidden Brand Context berjalan otomatis di belakang layar.</p>
+
+              <p className="text-center text-xs leading-5 text-slate-400">
+                Live research + evidence selection + hidden Brand Context berjalan otomatis di
+                belakang layar.
+              </p>
             </form>
           </section>
 
           <aside className="space-y-5">
             <div className="rounded-3xl bg-slate-950 p-6 text-white">
-              <p className="text-xs font-semibold uppercase tracking-widest text-blue-300">Yang berubah dari v1</p>
-              <h2 className="mt-3 text-2xl font-bold">User hanya melihat keputusan yang penting.</h2>
+              <p className="text-xs font-semibold uppercase tracking-widest text-blue-300">
+                Yang berubah dari v1
+              </p>
+              <h2 className="mt-3 text-2xl font-bold">
+                User hanya melihat keputusan yang penting.
+              </h2>
+
               <div className="mt-5 space-y-4 text-sm leading-6 text-slate-300">
-                <p><strong className="text-white">1. Quick Brief</strong><br />5 input utama, bukan puluhan field Brand Intelligence.</p>
-                <p><strong className="text-white">2. Story Angles</strong><br />AI mencari kasus nyata dan langsung memberi 5 angle untuk dipilih.</p>
-                <p><strong className="text-white">3. Final Brief</strong><br />Case-first story sequence, quality score, improve with AI, copy, dan export PDF.</p>
+                <p>
+                  <strong className="text-white">1. Quick Brief</strong>
+                  <br />
+                  5 input utama, bukan puluhan field Brand Intelligence.
+                </p>
+                <p>
+                  <strong className="text-white">2. Story Angles</strong>
+                  <br />
+                  AI mencari kasus nyata dan langsung memberi 5 angle untuk dipilih.
+                </p>
+                <p>
+                  <strong className="text-white">3. Final Brief</strong>
+                  <br />
+                  Case-first story sequence, quality score, improve with AI, copy, dan export PDF.
+                </p>
               </div>
             </div>
 
@@ -148,12 +377,26 @@ export default function StudioClient() {
                 <h2 className="font-semibold">Recent StoryBrief campaigns</h2>
                 <span className="text-xs text-slate-400">{history.length}</span>
               </div>
+
               <div className="mt-4 space-y-3">
-                {history.length === 0 && <p className="text-sm text-slate-500">Belum ada campaign dari versi Lite.</p>}
+                {history.length === 0 && (
+                  <p className="text-sm text-slate-500">
+                    Belum ada campaign dari versi Lite.
+                  </p>
+                )}
+
                 {history.map((item) => (
-                  <button key={item.id} onClick={() => router.push(`/campaign/${item.id}`)} className="w-full rounded-2xl border border-slate-200 p-4 text-left hover:border-blue-300 hover:bg-blue-50/40">
-                    <p className="font-medium text-slate-900">{item.product_or_program || item.name}</p>
-                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{item.objective}</p>
+                  <button
+                    key={item.id}
+                    onClick={() => router.push(`/campaign/${item.id}`)}
+                    className="w-full rounded-2xl border border-slate-200 p-4 text-left hover:border-blue-300 hover:bg-blue-50/40"
+                  >
+                    <p className="font-medium text-slate-900">
+                      {item.product_or_program || item.name}
+                    </p>
+                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
+                      {item.objective}
+                    </p>
                   </button>
                 ))}
               </div>
