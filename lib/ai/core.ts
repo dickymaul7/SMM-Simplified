@@ -44,7 +44,7 @@ export async function createStructuredJson<T>({
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) throw new Error("GEMINI_API_KEY belum dikonfigurasi.");
 
-  const response = await fetch("https://generativelanguage.googleapis.com/v1beta2/interactions", {
+  const response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -53,13 +53,12 @@ export async function createStructuredJson<T>({
     body: JSON.stringify({
       model: getAIModel(),
       input: `SYSTEM ROLE\n${system}\n\nUSER TASK\n${user}`,
-      response_format: [
-        {
-          type: "text",
-          mime_type: "application/json",
-          schema,
-        },
-      ],
+      store: false,
+      response_format: {
+        type: "text",
+        mime_type: "application/json",
+        schema,
+      },
     }),
     cache: "no-store",
   });
