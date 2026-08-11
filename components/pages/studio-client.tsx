@@ -174,8 +174,8 @@ export default function StudioClient() {
     <AuthGuard>
       <AppHeader />
 
-      <main className="mx-auto max-w-7xl px-5 py-8 lg:py-12">
-        <div className="grid gap-8 lg:grid-cols-[1.2fr_.8fr]">
+      <main className="app-workspace px-5 py-8 lg:px-8 lg:py-9">
+        <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[1.2fr_.8fr]">
           <section>
             <div className="max-w-3xl">
               <div className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
