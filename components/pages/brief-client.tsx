@@ -602,8 +602,8 @@ export default function BriefClient() {
     <AuthGuard>
       <AppHeader />
 
-      <main className="mx-auto max-w-6xl px-5 py-8 lg:py-12">
-        <div className="no-print mb-6 flex flex-wrap items-center justify-between gap-3">
+      <main className="app-workspace mx-auto max-w-[calc(72rem+16rem)] px-5 py-8 lg:px-8 lg:py-9">
+        <div className="no-print mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
           <button
             onClick={() => router.push(`/campaign/${idea?.campaign_id}`)}
             className="text-sm font-medium text-blue-600"
@@ -614,14 +614,14 @@ export default function BriefClient() {
           <div className="flex flex-wrap gap-2">
             <button
               onClick={copyBrief}
-              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-50"
+              className="ui-button ui-button-secondary"
             >
               {copied ? "Copied ✓" : "Copy Full Brief"}
             </button>
 
             <button
               onClick={() => window.print()}
-              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-50"
+              className="ui-button ui-button-secondary"
             >
               Export PDF
             </button>
@@ -629,7 +629,7 @@ export default function BriefClient() {
             <button
               onClick={openSchedule}
               disabled={!qcApproved}
-              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="ui-button ui-button-primary disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               {brief?.scheduled_for ? "Ubah Jadwal" : "Jadwalkan Brief"}
             </button>
@@ -651,13 +651,13 @@ export default function BriefClient() {
           </div>
         )}
 
-        <section className="print-card rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+        <section className="print-card ui-card p-5 md:p-6">
           <div className="flex flex-col justify-between gap-5 md:flex-row md:items-start">
             <div>
-              <div className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+              <div className="ui-badge ui-badge-info">
                 Final Storytelling Brief
               </div>
-              <h1 className="mt-4 max-w-4xl text-3xl font-bold leading-tight tracking-tight md:text-4xl">
+              <h1 className="mt-3 max-w-4xl text-2xl font-bold leading-tight tracking-tight md:text-3xl">
                 {idea?.working_title}
               </h1>
               <p className="mt-3 text-sm text-slate-500">
@@ -666,12 +666,12 @@ export default function BriefClient() {
             </div>
 
             <div
-              className={`rounded-3xl px-5 py-4 text-center ${
+              className={`rounded-2xl border px-5 py-3 text-center ${
                 score >= 90
-                  ? "bg-emerald-50 text-emerald-800"
+                  ? "border-emerald-100 bg-emerald-50 text-emerald-800"
                   : score >= 85
-                    ? "bg-amber-50 text-amber-800"
-                    : "bg-red-50 text-red-800"
+                    ? "border-amber-100 bg-amber-50 text-amber-800"
+                    : "border-red-100 bg-red-50 text-red-800"
               }`}
             >
               <div className="text-3xl font-black">{score.toFixed(0)}</div>
@@ -679,7 +679,7 @@ export default function BriefClient() {
             </div>
           </div>
 
-          <div className="mt-8 grid gap-4 md:grid-cols-2">
+          <div className="mt-6 grid gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200 md:grid-cols-2">
             {[
               ["Content Objective", brief.content_objective],
               ["Target Audience", brief.target_audience],
@@ -690,7 +690,7 @@ export default function BriefClient() {
               ["Brand POV", brief.brand_pov],
               ["Capability Bridge", brief.capability_bridge],
             ].map(([label, value]) => (
-              <div key={label as string} className="rounded-2xl bg-slate-50 p-4">
+              <div key={label as string} className="bg-white p-4">
                 <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
                   {label}
                 </p>
@@ -699,7 +699,7 @@ export default function BriefClient() {
             ))}
           </div>
 
-          <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50/50 p-5">
+          <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/50 p-4">
             <p className="text-xs font-semibold uppercase tracking-wider text-blue-500">
               Case Evidence
             </p>
@@ -707,7 +707,7 @@ export default function BriefClient() {
           </div>
         </section>
 
-        <section className="no-print mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+        <section className={`no-print mt-5 rounded-2xl border p-5 md:p-6 ${qcApproved ? "border-emerald-200 bg-emerald-50/40" : "border-amber-200 bg-amber-50/40"}`}>
           <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
             <div>
               <div className="flex flex-wrap items-center gap-2">
@@ -743,7 +743,7 @@ export default function BriefClient() {
                 <button
                   onClick={approveHumanQc}
                   disabled={qcSaving}
-                  className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+                  className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
                 >
                   {qcSaving ? "Menyimpan QC..." : "Tandai Lolos Human QC"}
                 </button>
@@ -752,7 +752,7 @@ export default function BriefClient() {
               {qcApproved && (
                 <button
                   onClick={openSchedule}
-                  className="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700"
+                  className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
                 >
                   {brief?.scheduled_for ? "Ubah Jadwal Brief" : "Jadwalkan Brief"}
                 </button>
@@ -761,7 +761,7 @@ export default function BriefClient() {
               {brief?.scheduled_for && (
                 <button
                   onClick={() => router.push("/calendar")}
-                  className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold hover:bg-slate-50"
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold hover:bg-slate-50"
                 >
                   Buka Content Calendar →
                 </button>
@@ -770,13 +770,13 @@ export default function BriefClient() {
           </div>
         </section>
 
-        <section className="mt-8">
+        <section className="mt-7">
           <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
             <div>
               <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
                 Designer-ready · Human editable
               </p>
-              <h2 className="mt-2 text-2xl font-bold">Story Sequence ({sections.length})</h2>
+              <h2 className="mt-1 text-xl font-bold tracking-tight">Story Sequence ({sections.length})</h2>
               <p className="no-print mt-2 text-sm text-slate-500">
                 Drag & drop untuk mengubah urutan. Gunakan Edit untuk mengubah headline, body copy,
                 evidence, visual direction, dan transition. Gunakan ↑ ↓ sebagai alternatif drag.
@@ -811,7 +811,7 @@ export default function BriefClient() {
                     if (dragOverId === section.id) setDragOverId(null);
                   }}
                   onDrop={(event) => handleDrop(event, section.id)}
-                  className={`print-card rounded-3xl border bg-white p-6 shadow-sm transition md:p-7 ${
+                  className={`print-card rounded-2xl border bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition md:p-6 ${
                     draggingId === section.id
                       ? "opacity-50"
                       : dragOverId === section.id
@@ -989,13 +989,13 @@ export default function BriefClient() {
                     </div>
                   ) : (
                     <>
-                      <h3 className="mt-3 text-2xl font-bold leading-tight">{section.headline}</h3>
+                      <h3 className="mt-3 text-xl font-bold leading-snug tracking-tight">{section.headline}</h3>
                       <p className="mt-3 text-sm leading-7 text-slate-700">
                         {section.supporting_copy}
                       </p>
 
-                      <div className="mt-5 grid gap-3 md:grid-cols-3">
-                        <div className="rounded-2xl bg-emerald-50/70 p-4">
+                      <div className="mt-4 grid gap-3 md:grid-cols-3">
+                        <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3.5">
                           <p className="text-xs font-semibold uppercase tracking-wider text-emerald-600">
                             Evidence
                           </p>
@@ -1004,7 +1004,7 @@ export default function BriefClient() {
                           </p>
                         </div>
 
-                        <div className="rounded-2xl bg-violet-50/70 p-4">
+                        <div className="rounded-xl border border-violet-100 bg-violet-50/60 p-3.5">
                           <p className="text-xs font-semibold uppercase tracking-wider text-violet-600">
                             Visual Direction
                           </p>
@@ -1013,7 +1013,7 @@ export default function BriefClient() {
                           </p>
                         </div>
 
-                        <div className="rounded-2xl bg-slate-50 p-4">
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
                           <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
                             Transition
                           </p>
@@ -1030,8 +1030,8 @@ export default function BriefClient() {
           </div>
         </section>
 
-        <section className="mt-8 grid gap-6 lg:grid-cols-[1fr_.9fr]">
-          <div className="print-card rounded-3xl border border-slate-200 bg-white p-6">
+        <section className="mt-7 grid gap-5 lg:grid-cols-[1fr_.9fr]">
+          <div className="print-card ui-card p-5">
             <h2 className="text-xl font-bold">Fact Check & Sources</h2>
             <p className="mt-3 text-sm leading-6 text-slate-600">
               {brief.fact_check_notes || "—"}
@@ -1044,7 +1044,7 @@ export default function BriefClient() {
                   href={source.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="block rounded-2xl border border-slate-200 p-4 hover:border-blue-300"
+                  className="block rounded-xl border border-slate-200 p-3.5 hover:border-blue-300"
                 >
                   <p className="text-xs font-semibold text-blue-600">
                     [S{index + 1}] {source.publisher || "Source"}
@@ -1060,18 +1060,18 @@ export default function BriefClient() {
             </div>
           </div>
 
-          <div className="no-print rounded-3xl bg-slate-950 p-6 text-white">
-            <p className="text-xs font-semibold uppercase tracking-widest text-blue-300">
+          <div className="no-print rounded-2xl border border-slate-200 bg-slate-50 p-5">
+            <p className="text-xs font-semibold uppercase tracking-widest text-blue-600">
               Improve with AI
             </p>
-            <h2 className="mt-3 text-2xl font-bold">Perbaiki hanya bagian yang lemah.</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-300">
+            <h2 className="mt-2 text-lg font-bold text-slate-900">Perbaiki hanya bagian yang lemah.</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
               AI membaca score + reviewer notes + source evidence. Versi baru hanya diterapkan jika
               skornya tidak turun.
             </p>
 
             {review?.reviewer_notes && (
-              <div className="mt-5 max-h-44 overflow-auto rounded-2xl bg-white/10 p-4 text-xs leading-6 text-slate-300">
+              <div className="mt-4 max-h-44 overflow-auto rounded-xl border border-slate-200 bg-white p-4 text-xs leading-6 text-slate-600">
                 {review.reviewer_notes}
               </div>
             )}
@@ -1079,14 +1079,14 @@ export default function BriefClient() {
             <textarea
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
-              className="mt-4 min-h-28 w-full rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500"
+              className="mt-4 min-h-28 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
               placeholder="Opsional: contoh ‘perkuat Slide 4-5, jangan ubah hook, CTA lebih soft’."
             />
 
             <button
               onClick={improve}
               disabled={improving}
-              className="mt-4 w-full rounded-2xl bg-blue-600 px-4 py-4 text-sm font-semibold hover:bg-blue-500 disabled:opacity-50"
+              className="mt-4 w-full rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
             >
               {improving ? "Improving & re-scoring..." : "Improve Brief with AI"}
             </button>

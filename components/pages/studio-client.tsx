@@ -168,38 +168,42 @@ export default function StudioClient() {
   }
 
   const inputClass =
-    "w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-50";
+    "w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-50";
 
   return (
     <AuthGuard>
       <AppHeader />
 
-      <main className="mx-auto max-w-7xl px-5 py-8 lg:py-12">
-        <div className="grid gap-8 lg:grid-cols-[1.2fr_.8fr]">
-          <section>
-            <div className="max-w-3xl">
-              <div className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-                3-step workflow
-              </div>
-              <h1 className="mt-4 text-4xl font-bold tracking-tight text-slate-950 md:text-5xl">
-                Dari 5 input ke storytelling brief yang siap dieksekusi.
-              </h1>
-              <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
-                Tidak ada Brand Intelligence form panjang. AI membangun konteks internal, mencari
-                kasus nyata via live research, lalu memberi 5 angle case-led.
+      <main className="app-workspace px-5 py-8 lg:px-8 lg:py-9">
+        <div className="mx-auto max-w-7xl">
+          <header className="ui-page-header">
+            <div>
+              <p className="ui-eyebrow">Content production</p>
+              <h1 className="ui-page-title">Brief Studio</h1>
+              <p className="ui-page-description">
+                Susun Quick Brief, pilih satu dari 5 Story Angles berbasis riset, lalu finalkan
+                storytelling brief bersama tim editorial.
               </p>
             </div>
+            <div className="hidden items-center gap-1 rounded-xl border border-slate-200 bg-white p-1 text-xs font-semibold text-slate-500 shadow-sm md:flex">
+              <span className="rounded-lg bg-blue-50 px-3 py-2 text-blue-700">1 · Quick Brief</span>
+              <span className="px-3 py-2">2 · Story Angles</span>
+              <span className="px-3 py-2">3 · Full Brief</span>
+            </div>
+          </header>
 
+          <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <section>
             <form
               onSubmit={submit}
-              className="mt-8 space-y-5 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:p-8"
+              className="ui-card space-y-5 p-5 md:p-6"
             >
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-emerald-50 px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
-                    Draft tersimpan otomatis
+                  <p className="flex items-center gap-2 text-xs font-semibold text-emerald-700">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500" /> Draft tersimpan otomatis
                   </p>
-                  <p className="mt-1 text-xs leading-5 text-emerald-700/80">
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
                     Pindah ke Content Calendar atau membuka brief lain tidak akan menghapus input ini.
                   </p>
                 </div>
@@ -207,7 +211,7 @@ export default function StudioClient() {
                 <button
                   type="button"
                   onClick={clearDraft}
-                  className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-50 hover:text-slate-800"
                 >
                   Kosongkan Form
                 </button>
@@ -344,35 +348,24 @@ export default function StudioClient() {
             </form>
           </section>
 
-          <aside className="space-y-5">
-            <div className="rounded-3xl bg-slate-950 p-6 text-white">
-              <p className="text-xs font-semibold uppercase tracking-widest text-blue-300">
-                Yang berubah dari v1
-              </p>
-              <h2 className="mt-3 text-2xl font-bold">
-                User hanya melihat keputusan yang penting.
-              </h2>
-
-              <div className="mt-5 space-y-4 text-sm leading-6 text-slate-300">
-                <p>
-                  <strong className="text-white">1. Quick Brief</strong>
-                  <br />
-                  5 input utama, bukan puluhan field Brand Intelligence.
-                </p>
-                <p>
-                  <strong className="text-white">2. Story Angles</strong>
-                  <br />
-                  AI mencari kasus nyata dan langsung memberi 5 angle untuk dipilih.
-                </p>
-                <p>
-                  <strong className="text-white">3. Final Brief</strong>
-                  <br />
-                  Case-first story sequence, quality score, improve with AI, copy, dan export PDF.
-                </p>
+          <aside className="space-y-4 xl:sticky xl:top-6">
+            <div className="ui-card p-5">
+              <p className="ui-eyebrow">Workflow</p>
+              <div className="mt-4 space-y-4">
+                {[
+                  ["01", "Quick Brief", "Konteks inti campaign"],
+                  ["02", "Story Angles", "5 opsi berbasis riset"],
+                  ["03", "Full Brief", "Editing, QC, dan jadwal"],
+                ].map(([number, title, detail], index) => (
+                  <div key={number} className="flex gap-3">
+                    <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[10px] font-bold ${index === 0 ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{number}</span>
+                    <div><p className="text-sm font-semibold text-slate-800">{title}</p><p className="mt-0.5 text-xs text-slate-500">{detail}</p></div>
+                  </div>
+                ))}
               </div>
             </div>
 
-            <div className="rounded-3xl border border-slate-200 bg-white p-6">
+            <div className="ui-card p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="font-semibold">Recent StoryBrief campaigns</h2>
                 <span className="text-xs text-slate-400">{history.length}</span>
@@ -389,7 +382,7 @@ export default function StudioClient() {
                   <button
                     key={item.id}
                     onClick={() => router.push(`/campaign/${item.id}`)}
-                    className="w-full rounded-2xl border border-slate-200 p-4 text-left hover:border-blue-300 hover:bg-blue-50/40"
+                    className="w-full rounded-xl border border-slate-200 p-3.5 text-left transition hover:border-blue-300 hover:bg-blue-50/40"
                   >
                     <p className="font-medium text-slate-900">
                       {item.product_or_program || item.name}
@@ -402,6 +395,7 @@ export default function StudioClient() {
               </div>
             </div>
           </aside>
+          </div>
         </div>
       </main>
     </AuthGuard>
