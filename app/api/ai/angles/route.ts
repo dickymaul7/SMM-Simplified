@@ -151,8 +151,12 @@ Query harus mencari nama perusahaan, kejadian konkret, konsekuensi, keputusan, d
       temperature: 0.2,
     });
 
-    const queries = queryPlan.queries.map((q) => q.trim()).filter(Boolean).slice(0, 4);
-    if (queries.length < 4) return errorJson("AI gagal membuat search query yang cukup.", 502);
+    const queryItems = Array.isArray(queryPlan?.queries) ? queryPlan.queries : [];
+    const queries = queryItems
+      .filter((query): query is string => typeof query === "string")
+      .map((query) => query.trim())
+      .filter(Boolean);
+    if (queries.length !== 4) return errorJson("Format respons AI tidak lengkap. Silakan generate ulang.", 502);
 
     const batches = await Promise.all(queries.map(async (query) => ({ query, results: await tavilySearch(query) })));
     const webSources = normalizeSources(batches);
@@ -196,9 +200,16 @@ ATURAN KUALITAS:
       temperature: 0.35,
     });
 
+    const synthesisCases = Array.isArray(synthesis?.cases) ? synthesis.cases : [];
+    const synthesisIdeas = Array.isArray(synthesis?.ideas) ? synthesis.ideas : [];
+    if (!synthesis?.brand_profile || !synthesis?.campaign || !synthesisCases.length || !synthesisIdeas.length) {
+      return errorJson("Format respons AI tidak lengkap. Silakan generate ulang.", 502);
+    }
+
     const sourceMap = new Map(webSources.map((source) => [source.ref, source]));
-    const normalizedCases = synthesis.cases.map((item) => {
-      const mappedSources = item.sources
+    const normalizedCases = synthesisCases.map((item) => {
+      const itemSources = Array.isArray(item?.sources) ? item.sources : [];
+      const mappedSources = itemSources
         .map((s) => ({ ...s, source: sourceMap.get(s.ref) }))
         .filter((s) => Boolean(s.source));
       const avg = average([
@@ -315,7 +326,7 @@ ATURAN KUALITAS:
     }
 
     const bestId = caseIdByKey.get(best.item.key)!;
-    const ideaRows = synthesis.ideas.map((idea) => {
+    const ideaRows = synthesisIdeas.map((idea) => {
       const referencedCase = caseIdByKey.get(idea.case_key) || bestId;
       const preferred = input.preferredFormat && input.preferredFormat !== "auto" ? input.preferredFormat : idea.recommended_format;
       return {
