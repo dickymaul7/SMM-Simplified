@@ -361,7 +361,7 @@ export default function CalendarClient() {
     <AuthGuard>
       <AppHeader />
 
-      <main className="mx-auto max-w-[1500px] px-4 py-8 lg:px-6 lg:py-10">
+      <main className="app-workspace mx-auto max-w-[calc(1500px+16rem)] px-4 py-8 lg:px-6 lg:py-9">
         <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
           <div>
             <div className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">

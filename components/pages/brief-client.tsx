@@ -602,7 +602,7 @@ export default function BriefClient() {
     <AuthGuard>
       <AppHeader />
 
-      <main className="mx-auto max-w-6xl px-5 py-8 lg:py-12">
+      <main className="app-workspace mx-auto max-w-[calc(72rem+16rem)] px-5 py-8 lg:px-8 lg:py-9">
         <div className="no-print mb-6 flex flex-wrap items-center justify-between gap-3">
           <button
             onClick={() => router.push(`/campaign/${idea?.campaign_id}`)}

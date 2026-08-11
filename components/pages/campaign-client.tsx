@@ -90,7 +90,7 @@ export default function CampaignClient() {
   return (
     <AuthGuard>
       <AppHeader />
-      <main className="mx-auto max-w-6xl px-5 py-8 lg:py-12">
+      <main className="app-workspace mx-auto max-w-[calc(72rem+16rem)] px-5 py-8 lg:px-8 lg:py-9">
         <button onClick={() => router.push("/")} className="no-print mb-5 text-sm font-medium text-blue-600">← Quick Brief</button>
         <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
           <div>
