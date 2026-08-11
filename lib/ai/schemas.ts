@@ -9,7 +9,7 @@ export const queryPlanSchema = {
       type: "array",
       minItems: 4,
       maxItems: 4,
-      items: { type: "string" },
+      items: { type: "string", minLength: 1 },
     },
   },
 } as const;
