@@ -117,7 +117,8 @@ function matchesSchema(value: unknown, schema: JsonSchema): boolean {
     if (!Array.isArray(value)) return false;
     if (typeof schema.minItems === "number" && value.length < schema.minItems) return false;
     if (typeof schema.maxItems === "number" && value.length > schema.maxItems) return false;
-    return !schema.items || value.every((item) => matchesSchema(item, schema.items));
+    const itemSchema = schema.items;
+    return !itemSchema || value.every((item) => matchesSchema(item, itemSchema));
   }
 
   if (schema.type === "string") {
