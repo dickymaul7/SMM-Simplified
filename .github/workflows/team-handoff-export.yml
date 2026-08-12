@@ -1,0 +1,44 @@
+name: Team Handoff Export
+
+on:
+  push:
+    branches:
+      - team-handoff-export-20260812
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare clean handoff folder
+        run: |
+          mkdir -p handoff/SMM-Simplified-Team-Handoff
+          rsync -a ./ handoff/SMM-Simplified-Team-Handoff/ \
+            --exclude '.git/' \
+            --exclude '.github/workflows/team-handoff-export.yml' \
+            --exclude '.env' \
+            --exclude '.env.local' \
+            --exclude '.env.production' \
+            --exclude 'node_modules/' \
+            --exclude '.next/' \
+            --exclude '.vercel/' \
+            --exclude 'npm-cache/' \
+            --exclude 'tmp/' \
+            --exclude 'backups/'
+          # Remove the obsolete root-level calendar copy to prevent accidental reuse.
+          rm -f handoff/SMM-Simplified-Team-Handoff/calendar-client.tsx
+
+      - name: Create ZIP
+        run: |
+          cd handoff
+          zip -r ../SMM-Simplified-Team-Handoff-20260812.zip SMM-Simplified-Team-Handoff
+
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SMM-Simplified-Team-Handoff-20260812
+          path: SMM-Simplified-Team-Handoff-20260812.zip
+          if-no-files-found: error
+          retention-days: 7
