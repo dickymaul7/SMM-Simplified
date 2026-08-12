@@ -1,0 +1,3 @@
+SMM Simplified Team Handoff
+Source branch: ui-revamp
+Export date: 2026-08-12
