@@ -1,0 +1,20 @@
+name: Global Brand Selector Build Check
+
+on:
+  push:
+    branches:
+      - feature/global-brand-selector
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package.json
+      - run: npm install
+      - run: npx tsc --noEmit
+      - run: npm run build
