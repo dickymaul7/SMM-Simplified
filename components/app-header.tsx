@@ -2,11 +2,18 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { createClient } from "@/lib/supabase/client";
+import {
+  ACTIVE_BRAND_ALL,
+  ALL_BRANDS_SELECTION,
+  readActiveBrandSelection,
+  writeActiveBrandSelection,
+} from "@/lib/active-brand";
 
 type IconName = "overview" | "studio" | "calendar" | "analytics" | "brands" | "settings";
+type BrandOption = { id: string; name: string };
 
 const navigation: Array<{ label: string; href: string; icon: IconName }> = [
   { label: "Overview", href: "/overview", icon: "overview" },
@@ -34,11 +41,64 @@ export default function AppHeader() {
   const router = useRouter();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [brands, setBrands] = useState<BrandOption[]>([]);
+  const [brandLoading, setBrandLoading] = useState(true);
+  const [activeBrandId, setActiveBrandId] = useState(ACTIVE_BRAND_ALL);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadBrandOptions() {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("brands")
+        .select("id,name")
+        .order("name", { ascending: true });
+
+      if (!active) return;
+
+      const rows = error ? [] : ((data ?? []) as BrandOption[]);
+      setBrands(rows);
+
+      const stored = readActiveBrandSelection();
+      const storedIsValid =
+        stored?.id === ACTIVE_BRAND_ALL || rows.some((brand) => brand.id === stored?.id);
+
+      if (stored && storedIsValid) {
+        setActiveBrandId(stored.id);
+      } else {
+        setActiveBrandId(ACTIVE_BRAND_ALL);
+        writeActiveBrandSelection(ALL_BRANDS_SELECTION);
+      }
+
+      setBrandLoading(false);
+    }
+
+    void loadBrandOptions();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function signOut() {
     const supabase = createClient();
     await supabase.auth.signOut();
     router.replace("/login");
+  }
+
+  function changeActiveBrand(nextId: string) {
+    setActiveBrandId(nextId);
+
+    if (nextId === ACTIVE_BRAND_ALL) {
+      writeActiveBrandSelection(ALL_BRANDS_SELECTION);
+      return;
+    }
+
+    const brand = brands.find((item) => item.id === nextId);
+    if (!brand) return;
+
+    writeActiveBrandSelection({ id: brand.id, name: brand.name });
   }
 
   const isActive = (href: string) => href === "/" ? pathname === "/" || pathname.startsWith("/campaign/") || pathname.startsWith("/brief/") : pathname === href || pathname.startsWith(`${href}/`);
@@ -54,6 +114,32 @@ export default function AppHeader() {
           <p className="truncate text-sm font-bold tracking-tight">SMM Simplified</p>
           <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Content operations</p>
         </div>
+      </div>
+
+      <div className="border-b border-white/8 px-3 py-4">
+        <div className="mb-2 flex items-center justify-between px-1">
+          <label htmlFor="global-active-brand" className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Active Brand</label>
+          <span className="text-[10px] font-medium text-slate-600">{brandLoading ? "Loading..." : `${brands.length} brands`}</span>
+        </div>
+        <div className="relative">
+          <select
+            id="global-active-brand"
+            aria-label="Select active brand"
+            disabled={brandLoading}
+            value={activeBrandId}
+            onChange={(event) => changeActiveBrand(event.target.value)}
+            className="w-full appearance-none rounded-xl border border-white/10 bg-white/[0.06] py-2.5 pl-3 pr-9 text-[13px] font-semibold text-slate-100 outline-none transition hover:bg-white/[0.09] focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-wait disabled:opacity-60"
+          >
+            <option value={ACTIVE_BRAND_ALL} className="bg-slate-900 text-white">All Brands</option>
+            {brands.map((brand) => (
+              <option key={brand.id} value={brand.id} className="bg-slate-900 text-white">{brand.name}</option>
+            ))}
+          </select>
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500">
+            <path d="m7 10 5 5 5-5" />
+          </svg>
+        </div>
+        <p className="mt-2 px-1 text-[10px] leading-4 text-slate-600">Pilihan tersimpan untuk sesi kerja berikutnya.</p>
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 py-5">
