@@ -11,6 +11,7 @@ import {
   readActiveBrandSelection,
   writeActiveBrandSelection,
 } from "@/lib/active-brand";
+import { useActiveBrandSelection } from "@/lib/use-active-brand";
 
 type IconName = "overview" | "studio" | "calendar" | "analytics" | "brands" | "settings";
 type BrandOption = { id: string; name: string };
@@ -40,10 +41,10 @@ function NavIcon({ name }: { name: IconName }) {
 export default function AppHeader() {
   const router = useRouter();
   const pathname = usePathname();
+  const { selection: activeBrand, hydrated } = useActiveBrandSelection();
   const [open, setOpen] = useState(false);
   const [brands, setBrands] = useState<BrandOption[]>([]);
   const [brandLoading, setBrandLoading] = useState(true);
-  const [activeBrandId, setActiveBrandId] = useState(ACTIVE_BRAND_ALL);
 
   useEffect(() => {
     let active = true;
@@ -64,10 +65,7 @@ export default function AppHeader() {
       const storedIsValid =
         stored?.id === ACTIVE_BRAND_ALL || rows.some((brand) => brand.id === stored?.id);
 
-      if (stored && storedIsValid) {
-        setActiveBrandId(stored.id);
-      } else {
-        setActiveBrandId(ACTIVE_BRAND_ALL);
+      if (stored && !storedIsValid) {
         writeActiveBrandSelection(ALL_BRANDS_SELECTION);
       }
 
@@ -81,6 +79,14 @@ export default function AppHeader() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!hydrated || activeBrand.id === ACTIVE_BRAND_ALL) return;
+    setBrands((current) => {
+      if (current.some((brand) => brand.id === activeBrand.id)) return current;
+      return [...current, { id: activeBrand.id, name: activeBrand.name }].sort((a, b) => a.name.localeCompare(b.name));
+    });
+  }, [activeBrand, hydrated]);
+
   async function signOut() {
     const supabase = createClient();
     await supabase.auth.signOut();
@@ -88,8 +94,6 @@ export default function AppHeader() {
   }
 
   function changeActiveBrand(nextId: string) {
-    setActiveBrandId(nextId);
-
     if (nextId === ACTIVE_BRAND_ALL) {
       writeActiveBrandSelection(ALL_BRANDS_SELECTION);
       return;
@@ -103,6 +107,9 @@ export default function AppHeader() {
 
   const isActive = (href: string) => href === "/" ? pathname === "/" || pathname.startsWith("/campaign/") || pathname.startsWith("/brief/") : pathname === href || pathname.startsWith(`${href}/`);
   const current = navigation.find((item) => isActive(item.href))?.label ?? "SMM Simplified";
+  const selectedValue = !hydrated || (activeBrand.id !== ACTIVE_BRAND_ALL && !brands.some((brand) => brand.id === activeBrand.id))
+    ? ACTIVE_BRAND_ALL
+    : activeBrand.id;
 
   const sidebar = (
     <aside className="flex h-full flex-col bg-[#111827] text-white">
@@ -125,8 +132,8 @@ export default function AppHeader() {
           <select
             id="global-active-brand"
             aria-label="Select active brand"
-            disabled={brandLoading}
-            value={activeBrandId}
+            disabled={brandLoading || !hydrated}
+            value={selectedValue}
             onChange={(event) => changeActiveBrand(event.target.value)}
             className="w-full appearance-none rounded-xl border border-white/10 bg-white/[0.06] py-2.5 pl-3 pr-9 text-[13px] font-semibold text-slate-100 outline-none transition hover:bg-white/[0.09] focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-wait disabled:opacity-60"
           >
@@ -139,7 +146,7 @@ export default function AppHeader() {
             <path d="m7 10 5 5 5-5" />
           </svg>
         </div>
-        <p className="mt-2 px-1 text-[10px] leading-4 text-slate-600">Pilihan tersimpan untuk sesi kerja berikutnya.</p>
+        <p className="mt-2 px-1 text-[10px] leading-4 text-slate-600">Pilihan ini menjadi context global untuk workspace.</p>
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 py-5">
