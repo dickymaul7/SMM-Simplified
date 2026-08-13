@@ -85,6 +85,64 @@ function parseJson<T>(text: string): T {
   return JSON.parse(extractFirstJson(text)) as T;
 }
 
+type JsonSchema = {
+  enum?: unknown[];
+  type?: string;
+  required?: string[];
+  properties?: Record<string, JsonSchema>;
+  items?: JsonSchema;
+  minItems?: number;
+  maxItems?: number;
+  minLength?: number;
+  minimum?: number;
+  maximum?: number;
+};
+
+function matchesSchema(value: unknown, schema: JsonSchema): boolean {
+  if (schema.enum && !schema.enum.includes(value)) return false;
+
+  if (schema.type === "object") {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+    const record = value as Record<string, unknown>;
+    if (Array.isArray(schema.required) && schema.required.some((key: string) => !(key in record))) {
+      return false;
+    }
+    return Object.entries(schema.properties ?? {}).every(
+      ([key, childSchema]) =>
+        !(key in record) || matchesSchema(record[key], childSchema),
+    );
+  }
+
+  if (schema.type === "array") {
+    if (!Array.isArray(value)) return false;
+    if (typeof schema.minItems === "number" && value.length < schema.minItems) return false;
+    if (typeof schema.maxItems === "number" && value.length > schema.maxItems) return false;
+    const itemSchema = schema.items;
+    return !itemSchema || value.every((item) => matchesSchema(item, itemSchema));
+  }
+
+  if (schema.type === "string") {
+    if (typeof value !== "string") return false;
+    if (typeof schema.minLength === "number" && value.trim().length < schema.minLength) return false;
+    return true;
+  }
+
+  if (schema.type === "number") {
+    if (typeof value !== "number" || !Number.isFinite(value)) return false;
+    if (typeof schema.minimum === "number" && value < schema.minimum) return false;
+    if (typeof schema.maximum === "number" && value > schema.maximum) return false;
+    return true;
+  }
+
+  if (schema.type === "integer") {
+    if (typeof value !== "number" || !Number.isInteger(value)) return false;
+    if (typeof schema.minimum === "number" && value < schema.minimum) return false;
+    if (typeof schema.maximum === "number" && value > schema.maximum) return false;
+  }
+
+  return true;
+}
+
 function extractGenerateContentText(payload: any) {
   const candidates = Array.isArray(payload?.candidates) ? payload.candidates : [];
   const parts = candidates?.[0]?.content?.parts;
@@ -193,17 +251,20 @@ lebih tepat dipertahankan dalam bahasa aslinya.`;
   });
 
   try {
-    return parseJson<T>(firstText);
+    const parsed = parseJson<T>(firstText);
+    if (!matchesSchema(parsed, schema as JsonSchema)) throw new Error("Incomplete JSON structure");
+    return parsed;
   } catch {
-    // One repair pass if the model adds malformed JSON despite the contract.
-    const repairPrompt = `Perbaiki output berikut menjadi SATU JSON valid.
+    // One repair pass for malformed JSON or valid JSON with an incomplete structure.
+    const repairPrompt = `Perbaiki struktur output berikut menjadi SATU JSON valid.
 
 ATURAN:
 - Hanya JSON.
 - Tanpa markdown atau code fence.
 - Jangan menambah penjelasan.
 - Pertahankan isi/fakta semaksimal mungkin.
-- Sesuaikan dengan schema berikut.
+- Jangan mengubah isi editorial kecuali diperlukan untuk memenuhi struktur.
+- Lengkapi semua field required dan sesuaikan dengan schema berikut.
 
 SCHEMA:
 ${contract}
@@ -218,11 +279,11 @@ ${firstText}`;
     });
 
     try {
-      return parseJson<T>(repairedText);
+      const repaired = parseJson<T>(repairedText);
+      if (!matchesSchema(repaired, schema as JsonSchema)) throw new Error("Incomplete JSON structure");
+      return repaired;
     } catch {
-      throw new Error(
-        "Gemini berhasil merespons tetapi JSON belum valid setelah 1x repair. Silakan generate ulang.",
-      );
+      throw new Error("Format respons AI tidak lengkap. Silakan generate ulang.");
     }
   }
 }

@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AuthGuard from "@/components/auth-guard";
 import AppHeader from "@/components/app-header";
+import { ACTIVE_BRAND_ALL } from "@/lib/active-brand";
 import { createClient } from "@/lib/supabase/client";
+import { useActiveBrandSelection } from "@/lib/use-active-brand";
 
 const APP_MARKER = "__storybrief_lite__";
 const QUICK_BRIEF_DRAFT_KEY = "smm-simplified:quick-brief-draft:v1";
@@ -28,8 +30,15 @@ type CampaignRow = {
   created_at: string;
 };
 
+type BrandContextRow = {
+  id: string;
+  name: string;
+  website: string | null;
+};
+
 export default function StudioClient() {
   const router = useRouter();
+  const { selection: activeBrand, hydrated: activeBrandHydrated } = useActiveBrandSelection();
   const [brandName, setBrandName] = useState("");
   const [website, setWebsite] = useState("");
   const [topic, setTopic] = useState("");
@@ -41,6 +50,7 @@ export default function StudioClient() {
   >("auto");
   const [extraContext, setExtraContext] = useState("");
   const [loading, setLoading] = useState(false);
+  const [brandContextLoading, setBrandContextLoading] = useState(false);
   const [error, setError] = useState("");
   const [history, setHistory] = useState<CampaignRow[]>([]);
   const [draftLoaded, setDraftLoaded] = useState(false);
@@ -71,16 +81,66 @@ export default function StudioClient() {
     } finally {
       setDraftLoaded(true);
     }
-
-    const supabase = createClient();
-    supabase
-      .from("campaigns")
-      .select("id,name,objective,product_or_program,created_at")
-      .contains("priority_topics", [APP_MARKER])
-      .order("created_at", { ascending: false })
-      .limit(8)
-      .then(({ data }) => setHistory((data ?? []) as CampaignRow[]));
   }, []);
+
+  useEffect(() => {
+    if (!activeBrandHydrated) return;
+    let active = true;
+
+    async function syncBrandContext() {
+      setBrandContextLoading(true);
+      setError("");
+      const supabase = createClient();
+
+      let historyQuery = supabase
+        .from("campaigns")
+        .select("id,name,objective,product_or_program,created_at")
+        .contains("priority_topics", [APP_MARKER])
+        .order("created_at", { ascending: false })
+        .limit(8);
+
+      if (activeBrand.id === ACTIVE_BRAND_ALL) {
+        const { data } = await historyQuery;
+        if (!active) return;
+        setHistory((data ?? []) as CampaignRow[]);
+        setBrandName("");
+        setWebsite("");
+        setBrandContextLoading(false);
+        return;
+      }
+
+      const [{ data: brand, error: brandError }, historyResult] = await Promise.all([
+        supabase
+          .from("brands")
+          .select("id,name,website")
+          .eq("id", activeBrand.id)
+          .maybeSingle(),
+        historyQuery.eq("brand_id", activeBrand.id),
+      ]);
+
+      if (!active) return;
+
+      if (brandError || !brand) {
+        setBrandName(activeBrand.name);
+        setWebsite("");
+        setHistory((historyResult.data ?? []) as CampaignRow[]);
+        setError(brandError?.message || "Active Brand tidak ditemukan. Pilih ulang brand dari sidebar.");
+        setBrandContextLoading(false);
+        return;
+      }
+
+      const context = brand as BrandContextRow;
+      setBrandName(context.name);
+      setWebsite(context.website ?? "");
+      setHistory((historyResult.data ?? []) as CampaignRow[]);
+      setBrandContextLoading(false);
+    }
+
+    void syncBrandContext();
+    return () => {
+      active = false;
+    };
+  }, [activeBrand.id, activeBrand.name, activeBrandHydrated]);
 
   useEffect(() => {
     if (!draftLoaded) return;
@@ -114,8 +174,10 @@ export default function StudioClient() {
   ]);
 
   function clearDraft() {
-    setBrandName("");
-    setWebsite("");
+    if (activeBrand.id === ACTIVE_BRAND_ALL) {
+      setBrandName("");
+      setWebsite("");
+    }
     setTopic("");
     setAudience("");
     setObjective("");
@@ -133,6 +195,12 @@ export default function StudioClient() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+
+    if (!activeBrandHydrated || activeBrand.id === ACTIVE_BRAND_ALL) {
+      setError("Pilih satu Active Brand dari sidebar sebelum membuat Story Angles.");
+      return;
+    }
+
     setLoading(true);
     setError("");
 
@@ -141,6 +209,7 @@ export default function StudioClient() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          brandId: activeBrand.id,
           brandName,
           website,
           topic,
@@ -168,240 +237,264 @@ export default function StudioClient() {
   }
 
   const inputClass =
-    "w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-50";
+    "w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-50";
+
+  const hasActiveBrand = activeBrandHydrated && activeBrand.id !== ACTIVE_BRAND_ALL;
 
   return (
     <AuthGuard>
       <AppHeader />
 
-      <main className="mx-auto max-w-7xl px-5 py-8 lg:py-12">
-        <div className="grid gap-8 lg:grid-cols-[1.2fr_.8fr]">
-          <section>
-            <div className="max-w-3xl">
-              <div className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-                3-step workflow
+      <main className="app-workspace px-5 py-6 lg:px-8 lg:py-7">
+        <div className="mx-auto max-w-7xl">
+          <header className="mb-6 border-b border-slate-200 pb-5">
+            <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600">
+                  Editorial workspace
+                </p>
+                <h1 className="mt-1.5 text-3xl font-bold tracking-tight text-slate-950">
+                  Brief Studio
+                </h1>
+                <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-500">
+                  Susun konteks utama, lalu gunakan live research untuk
+                  menghasilkan lima story angle berbasis kasus.
+                </p>
               </div>
-              <h1 className="mt-4 text-4xl font-bold tracking-tight text-slate-950 md:text-5xl">
-                Dari 5 input ke storytelling brief yang siap dieksekusi.
-              </h1>
-              <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
-                Tidak ada Brand Intelligence form panjang. AI membangun konteks internal, mencari
-                kasus nyata via live research, lalu memberi 5 angle case-led.
-              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium ${hasActiveBrand ? "border-blue-200 bg-blue-50 text-blue-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${hasActiveBrand ? "bg-blue-500" : "bg-amber-500"}`} />
+                  {hasActiveBrand ? `Active Brand: ${activeBrand.name}` : "Pilih Active Brand"}
+                </div>
+                <div className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  Draft tersimpan otomatis
+                </div>
+              </div>
             </div>
+          </header>
 
-            <form
-              onSubmit={submit}
-              className="mt-8 space-y-5 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:p-8"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-emerald-50 px-4 py-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
-                    Draft tersimpan otomatis
-                  </p>
-                  <p className="mt-1 text-xs leading-5 text-emerald-700/80">
-                    Pindah ke Content Calendar atau membuka brief lain tidak akan menghapus input ini.
-                  </p>
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+            <section>
+              <form
+                onSubmit={submit}
+                className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                  <div>
+                    <h2 className="text-base font-semibold text-slate-950">
+                      Quick Brief
+                    </h2>
+                    <p className="mt-0.5 text-xs leading-5 text-slate-500">
+                      Brand mengikuti Global Brand Selector. Input campaign tetap tersimpan saat Anda berpindah workspace.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={clearDraft}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
+                  >
+                    Kosongkan Form
+                  </button>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={clearDraft}
-                  className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
-                >
-                  Kosongkan Form
-                </button>
-              </div>
+                <div>
+                  <label className="mb-2 block text-sm font-semibold">
+                    1. Active Brand
+                  </label>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <input
+                      required
+                      readOnly
+                      className={`${inputClass} cursor-default bg-slate-50 text-slate-600`}
+                      value={brandContextLoading ? "Memuat brand..." : brandName}
+                      placeholder="Pilih Active Brand di sidebar"
+                    />
+                    <input
+                      readOnly
+                      className={`${inputClass} cursor-default bg-slate-50 text-slate-600`}
+                      value={website}
+                      placeholder={hasActiveBrand ? "Website belum tersimpan" : "Website mengikuti Active Brand"}
+                    />
+                  </div>
+                  {!hasActiveBrand && (
+                    <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-700">
+                      Brief Studio membutuhkan satu brand aktif. Pilih brand dari dropdown paling atas di sidebar.
+                    </p>
+                  )}
+                </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-semibold">
-                  1. Brand / perusahaan
-                </label>
-                <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-semibold">
+                    2. Apa yang ingin dibahas / dipromosikan?
+                  </label>
                   <input
                     required
                     className={inputClass}
-                    value={brandName}
-                    onChange={(e) => setBrandName(e.target.value)}
-                    placeholder="Contoh: Proxsis Academy"
-                  />
-                  <input
-                    className={inputClass}
-                    value={website}
-                    onChange={(e) => setWebsite(e.target.value)}
-                    placeholder="Website (opsional)"
+                    value={topic}
+                    onChange={(e) => setTopic(e.target.value)}
+                    placeholder="Contoh: Webinar ISO 37001 / AI for HR / Leadership"
                   />
                 </div>
-              </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-semibold">
-                  2. Apa yang ingin dibahas / dipromosikan?
-                </label>
-                <input
-                  required
-                  className={inputClass}
-                  value={topic}
-                  onChange={(e) => setTopic(e.target.value)}
-                  placeholder="Contoh: Webinar ISO 37001 / AI for HR / Leadership"
-                />
-              </div>
+                <div>
+                  <label className="mb-2 block text-sm font-semibold">
+                    3. Siapa audience utamanya?
+                  </label>
+                  <textarea
+                    required
+                    className={`${inputClass} min-h-24 resize-y`}
+                    value={audience}
+                    onChange={(e) => setAudience(e.target.value)}
+                    placeholder="Contoh: HR Manager, Head of Compliance, Director, business owner..."
+                  />
+                </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-semibold">
-                  3. Siapa audience utamanya?
-                </label>
-                <textarea
-                  required
-                  className={`${inputClass} min-h-24 resize-y`}
-                  value={audience}
-                  onChange={(e) => setAudience(e.target.value)}
-                  placeholder="Contoh: HR Manager, Head of Compliance, Director, business owner..."
-                />
-              </div>
+                <div>
+                  <label className="mb-2 block text-sm font-semibold">
+                    4. Apa hasil yang ingin dicapai?
+                  </label>
+                  <textarea
+                    required
+                    className={`${inputClass} min-h-24 resize-y`}
+                    value={objective}
+                    onChange={(e) => setObjective(e.target.value)}
+                    placeholder="Contoh: membangun awareness bahwa anti-suap perlu dioperasionalkan sebagai sistem, bukan hanya kebijakan."
+                  />
+                </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-semibold">
-                  4. Apa hasil yang ingin dicapai?
-                </label>
-                <textarea
-                  required
-                  className={`${inputClass} min-h-24 resize-y`}
-                  value={objective}
-                  onChange={(e) => setObjective(e.target.value)}
-                  placeholder="Contoh: membangun awareness bahwa anti-suap perlu dioperasionalkan sebagai sistem, bukan hanya kebijakan."
-                />
-              </div>
+                <div>
+                  <label className="mb-2 block text-sm font-semibold">
+                    5. CTA
+                  </label>
+                  <input
+                    className={inputClass}
+                    value={cta}
+                    onChange={(e) => setCta(e.target.value)}
+                    placeholder="Opsional — contoh: Ikuti webinar / konsultasikan kebutuhan training"
+                  />
+                </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-semibold">5. CTA</label>
-                <input
-                  className={inputClass}
-                  value={cta}
-                  onChange={(e) => setCta(e.target.value)}
-                  placeholder="Opsional — contoh: Ikuti webinar / konsultasikan kebutuhan training"
-                />
-              </div>
+                <div>
+                  <span className="mb-2 block text-sm font-semibold">
+                    Format
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      ["auto", "AI pilih"],
+                      ["carousel", "Carousel"],
+                      ["reels", "Reels"],
+                      ["single_post", "Single Post"],
+                    ].map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() =>
+                          setPreferredFormat(value as typeof preferredFormat)
+                        }
+                        className={`rounded-full px-4 py-2 text-sm font-medium ${
+                          preferredFormat === value
+                            ? "bg-slate-950 text-white"
+                            : "border border-slate-200 bg-white text-slate-700"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-              <div>
-                <span className="mb-2 block text-sm font-semibold">Format</span>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    ["auto", "AI pilih"],
-                    ["carousel", "Carousel"],
-                    ["reels", "Reels"],
-                    ["single_post", "Single Post"],
-                  ].map(([value, label]) => (
+                <details className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+                  <summary className="cursor-pointer text-sm font-semibold">
+                    Advanced context (opsional)
+                  </summary>
+                  <textarea
+                    className={`${inputClass} mt-4 min-h-28 resize-y`}
+                    value={extraContext}
+                    onChange={(e) => setExtraContext(e.target.value)}
+                    placeholder="Hal yang wajib masuk / wajib dihindari, tone khusus, batasan claim, konteks klien, dll."
+                  />
+                </details>
+
+                {error && (
+                  <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {error}
+                  </div>
+                )}
+
+                <button
+                  disabled={loading || brandContextLoading || !hasActiveBrand}
+                  className="w-full rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {loading
+                    ? "AI sedang riset kasus & menyusun angle..."
+                    : "Cari Kasus & Buat 5 Story Angles →"}
+                </button>
+
+                <p className="text-center text-xs leading-5 text-slate-400">
+                  Live research + evidence selection + Brand Intelligence brand aktif
+                  berjalan otomatis di belakang layar.
+                </p>
+              </form>
+            </section>
+
+            <aside>
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="px-5 pt-5">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                      Workflow
+                    </p>
+                    <h2 className="mt-1 text-base font-semibold text-slate-950">
+                      Campaign terbaru
+                    </h2>
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      {hasActiveBrand ? activeBrand.name : "Semua brand"}
+                    </p>
+                  </div>
+                  <span className="mr-5 mt-5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">
+                    {history.length}
+                  </span>
+                </div>
+
+                <div className="mt-4 divide-y divide-slate-100 border-t border-slate-100">
+                  {history.length === 0 && (
+                    <p className="px-5 py-8 text-center text-sm text-slate-500">
+                      Belum ada campaign untuk context ini.
+                    </p>
+                  )}
+
+                  {history.map((item) => (
                     <button
-                      key={value}
-                      type="button"
-                      onClick={() =>
-                        setPreferredFormat(value as typeof preferredFormat)
-                      }
-                      className={`rounded-full px-4 py-2 text-sm font-medium ${
-                        preferredFormat === value
-                          ? "bg-slate-950 text-white"
-                          : "border border-slate-200 bg-white text-slate-700"
-                      }`}
+                      key={item.id}
+                      onClick={() => router.push(`/campaign/${item.id}`)}
+                      className="group w-full px-5 py-4 text-left transition hover:bg-blue-50/50"
                     >
-                      {label}
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="text-sm font-semibold text-slate-900 group-hover:text-blue-700">
+                          {item.product_or_program || item.name}
+                        </p>
+                        <span className="text-slate-300 group-hover:text-blue-500">
+                          →
+                        </span>
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
+                        {item.objective}
+                      </p>
+                      <p className="mt-2 text-[11px] font-medium text-slate-400">
+                        {new Intl.DateTimeFormat("id-ID", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        }).format(new Date(item.created_at))}
+                      </p>
                     </button>
                   ))}
                 </div>
               </div>
-
-              <details className="rounded-2xl bg-slate-50 p-4">
-                <summary className="cursor-pointer text-sm font-semibold">
-                  Advanced context (opsional)
-                </summary>
-                <textarea
-                  className={`${inputClass} mt-4 min-h-28 resize-y`}
-                  value={extraContext}
-                  onChange={(e) => setExtraContext(e.target.value)}
-                  placeholder="Hal yang wajib masuk / wajib dihindari, tone khusus, batasan claim, konteks klien, dll."
-                />
-              </details>
-
-              {error && (
-                <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">
-                  {error}
-                </div>
-              )}
-
-              <button
-                disabled={loading}
-                className="w-full rounded-2xl bg-blue-600 px-5 py-4 font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
-              >
-                {loading
-                  ? "AI sedang riset kasus & menyusun angle..."
-                  : "Cari Kasus & Buat 5 Story Angles →"}
-              </button>
-
-              <p className="text-center text-xs leading-5 text-slate-400">
-                Live research + evidence selection + hidden Brand Context berjalan otomatis di
-                belakang layar.
-              </p>
-            </form>
-          </section>
-
-          <aside className="space-y-5">
-            <div className="rounded-3xl bg-slate-950 p-6 text-white">
-              <p className="text-xs font-semibold uppercase tracking-widest text-blue-300">
-                Yang berubah dari v1
-              </p>
-              <h2 className="mt-3 text-2xl font-bold">
-                User hanya melihat keputusan yang penting.
-              </h2>
-
-              <div className="mt-5 space-y-4 text-sm leading-6 text-slate-300">
-                <p>
-                  <strong className="text-white">1. Quick Brief</strong>
-                  <br />
-                  5 input utama, bukan puluhan field Brand Intelligence.
-                </p>
-                <p>
-                  <strong className="text-white">2. Story Angles</strong>
-                  <br />
-                  AI mencari kasus nyata dan langsung memberi 5 angle untuk dipilih.
-                </p>
-                <p>
-                  <strong className="text-white">3. Final Brief</strong>
-                  <br />
-                  Case-first story sequence, quality score, improve with AI, copy, dan export PDF.
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-3xl border border-slate-200 bg-white p-6">
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="font-semibold">Recent StoryBrief campaigns</h2>
-                <span className="text-xs text-slate-400">{history.length}</span>
-              </div>
-
-              <div className="mt-4 space-y-3">
-                {history.length === 0 && (
-                  <p className="text-sm text-slate-500">
-                    Belum ada campaign dari versi Lite.
-                  </p>
-                )}
-
-                {history.map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => router.push(`/campaign/${item.id}`)}
-                    className="w-full rounded-2xl border border-slate-200 p-4 text-left hover:border-blue-300 hover:bg-blue-50/40"
-                  >
-                    <p className="font-medium text-slate-900">
-                      {item.product_or_program || item.name}
-                    </p>
-                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
-                      {item.objective}
-                    </p>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </aside>
+            </aside>
+          </div>
         </div>
       </main>
     </AuthGuard>

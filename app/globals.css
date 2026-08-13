@@ -1,8 +1,18 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  --background: #f5f6f8;
+  --foreground: #18212f;
+  --surface: #ffffff;
+  --surface-subtle: #f8fafc;
+  --border: #e3e8ef;
+  --muted: #667085;
+  --sidebar: #111827;
+  --sidebar-muted: #94a3b8;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --radius-card: 1rem;
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 8px 24px rgb(15 23 42 / 0.035);
 }
 
 * { box-sizing: border-box; }
@@ -12,12 +22,130 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 button, input, textarea, select { font: inherit; }
+button, a { -webkit-tap-highlight-color: transparent; }
+button:not(:disabled), a { cursor: pointer; }
+input, textarea, select { color: var(--foreground); }
+::selection { background: #dbeafe; color: #172554; }
 a { color: inherit; text-decoration: none; }
+
+:focus-visible {
+  outline: 3px solid rgb(59 130 246 / 0.3);
+  outline-offset: 2px;
+}
+
+/* Shared application layout */
+.app-workspace {
+  min-height: 100vh;
+  padding-top: 4.5rem;
+}
+
+/* Shared Phase 1 design-system primitives */
+.ui-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.ui-card-compact { padding: 1.25rem; }
+
+.ui-page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.ui-eyebrow {
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.ui-page-title {
+  margin: 0.35rem 0 0;
+  color: #101828;
+  font-size: clamp(1.75rem, 3vw, 2.25rem);
+  font-weight: 750;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+}
+
+.ui-page-description {
+  max-width: 44rem;
+  margin: 0.55rem 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.65;
+}
+
+.ui-button {
+  display: inline-flex;
+  min-height: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 0.7rem;
+  padding: 0.6rem 0.95rem;
+  font-size: 0.85rem;
+  font-weight: 650;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.ui-button-primary { background: var(--accent); color: white; }
+.ui-button-primary:hover { background: var(--accent-hover); }
+.ui-button-secondary { border-color: var(--border); background: white; color: #344054; }
+.ui-button-secondary:hover { border-color: #cbd5e1; background: #f8fafc; color: #101828; }
+
+.ui-input {
+  width: 100%;
+  border: 1px solid #d7dee8;
+  border-radius: 0.7rem;
+  background: white;
+  padding: 0.7rem 0.85rem;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.ui-input:focus { border-color: #60a5fa; box-shadow: 0 0 0 3px rgb(59 130 246 / 0.1); }
+
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0.25rem 0.55rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.ui-badge-neutral { border-color: #e2e8f0; background: #f8fafc; color: #475569; }
+.ui-badge-info { border-color: #bfdbfe; background: #eff6ff; color: #1d4ed8; }
+.ui-badge-success { border-color: #a7f3d0; background: #ecfdf5; color: #047857; }
+.ui-badge-warning { border-color: #fde68a; background: #fffbeb; color: #b45309; }
+.ui-badge-danger { border-color: #fecaca; background: #fef2f2; color: #b91c1c; }
+
+@media (min-width: 1024px) {
+  .app-workspace { margin-left: 16rem; padding-top: 0; }
+}
 
 @media print {
   .no-print { display: none !important; }
+  .app-workspace { margin-left: 0 !important; padding-top: 0 !important; }
   body { background: white; }
   .print-card { break-inside: avoid; box-shadow: none !important; }
 }

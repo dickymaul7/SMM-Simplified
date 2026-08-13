@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
 const APP_MARKER = "__storybrief_lite__";
 
 type QuickBrief = {
+  brandId?: string;
   brandName: string;
   website?: string;
   topic: string;
@@ -85,6 +86,7 @@ export async function POST(request: Request) {
   try {
     const body = (await request.json().catch(() => ({}))) as Partial<QuickBrief>;
     const input: QuickBrief = {
+      brandId: String(body.brandId ?? "").trim() || undefined,
       brandName: String(body.brandName ?? "").trim(),
       website: String(body.website ?? "").trim(),
       topic: String(body.topic ?? "").trim(),
@@ -95,7 +97,7 @@ export async function POST(request: Request) {
       extraContext: String(body.extraContext ?? "").trim(),
     };
 
-    if (!input.brandName || !input.topic || !input.audience || !input.objective) {
+    if ((!input.brandId && !input.brandName) || !input.topic || !input.audience || !input.objective) {
       return errorJson("Brand, topik/program, target audience, dan objective wajib diisi.");
     }
     if (!process.env.GEMINI_API_KEY?.trim()) return errorJson("GEMINI_API_KEY belum dikonfigurasi.", 503);
@@ -105,14 +107,28 @@ export async function POST(request: Request) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return errorJson("Session login tidak valid. Silakan sign in ulang.", 401);
 
-    const { data: matchingBrands, error: brandLookupError } = await supabase
-      .from("brands")
-      .select("*")
-      .ilike("name", input.brandName)
-      .limit(1);
-    if (brandLookupError) return errorJson(brandLookupError.message, 500);
+    let existingBrand: any = null;
+    if (input.brandId) {
+      const { data, error } = await supabase
+        .from("brands")
+        .select("*")
+        .eq("id", input.brandId)
+        .maybeSingle();
+      if (error) return errorJson(error.message, 500);
+      if (!data) return errorJson("Active Brand tidak ditemukan. Pilih ulang brand dari sidebar.", 404);
+      existingBrand = data;
+      input.brandName = data.name;
+      if (!input.website && data.website) input.website = data.website;
+    } else {
+      const { data: matchingBrands, error: brandLookupError } = await supabase
+        .from("brands")
+        .select("*")
+        .ilike("name", input.brandName)
+        .limit(1);
+      if (brandLookupError) return errorJson(brandLookupError.message, 500);
+      existingBrand = matchingBrands?.[0] ?? null;
+    }
 
-    const existingBrand = matchingBrands?.[0] ?? null;
     let existingGuideline: any = null;
     if (existingBrand) {
       const result = await supabase.from("brand_guidelines").select("*").eq("brand_id", existingBrand.id).maybeSingle();
@@ -151,8 +167,12 @@ Query harus mencari nama perusahaan, kejadian konkret, konsekuensi, keputusan, d
       temperature: 0.2,
     });
 
-    const queries = queryPlan.queries.map((q) => q.trim()).filter(Boolean).slice(0, 4);
-    if (queries.length < 4) return errorJson("AI gagal membuat search query yang cukup.", 502);
+    const queryItems = Array.isArray(queryPlan?.queries) ? queryPlan.queries : [];
+    const queries = queryItems
+      .filter((query): query is string => typeof query === "string")
+      .map((query) => query.trim())
+      .filter(Boolean);
+    if (queries.length !== 4) return errorJson("Format respons AI tidak lengkap. Silakan generate ulang.", 502);
 
     const batches = await Promise.all(queries.map(async (query) => ({ query, results: await tavilySearch(query) })));
     const webSources = normalizeSources(batches);
@@ -196,9 +216,16 @@ ATURAN KUALITAS:
       temperature: 0.35,
     });
 
+    const synthesisCases = Array.isArray(synthesis?.cases) ? synthesis.cases : [];
+    const synthesisIdeas = Array.isArray(synthesis?.ideas) ? synthesis.ideas : [];
+    if (!synthesis?.brand_profile || !synthesis?.campaign || !synthesisCases.length || !synthesisIdeas.length) {
+      return errorJson("Format respons AI tidak lengkap. Silakan generate ulang.", 502);
+    }
+
     const sourceMap = new Map(webSources.map((source) => [source.ref, source]));
-    const normalizedCases = synthesis.cases.map((item) => {
-      const mappedSources = item.sources
+    const normalizedCases = synthesisCases.map((item) => {
+      const itemSources = Array.isArray(item?.sources) ? item.sources : [];
+      const mappedSources = itemSources
         .map((s) => ({ ...s, source: sourceMap.get(s.ref) }))
         .filter((s) => Boolean(s.source));
       const avg = average([
@@ -315,7 +342,7 @@ ATURAN KUALITAS:
     }
 
     const bestId = caseIdByKey.get(best.item.key)!;
-    const ideaRows = synthesis.ideas.map((idea) => {
+    const ideaRows = synthesisIdeas.map((idea) => {
       const referencedCase = caseIdByKey.get(idea.case_key) || bestId;
       const preferred = input.preferredFormat && input.preferredFormat !== "auto" ? input.preferredFormat : idea.recommended_format;
       return {
