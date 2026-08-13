@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import AuthGuard from "@/components/auth-guard";
 import AppHeader from "@/components/app-header";
+import { ACTIVE_BRAND_ALL, writeActiveBrandSelection } from "@/lib/active-brand";
 import { createClient } from "@/lib/supabase/client";
+import { useActiveBrandSelection } from "@/lib/use-active-brand";
 
 type BrandRow = {
   id: string;
@@ -55,10 +57,7 @@ type ExtractedIntelligence = {
 };
 
 function lines(value: string) {
-  return value
-    .split(/\r?\n/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+  return value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
 }
 
 function toText(value: unknown) {
@@ -82,6 +81,7 @@ function slugify(value: string) {
 }
 
 export default function BrandsClient() {
+  const { selection: activeBrand, hydrated: activeBrandHydrated } = useActiveBrandSelection();
   const [brands, setBrands] = useState<BrandRow[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [guideline, setGuideline] = useState<GuidelineRow | null>(null);
@@ -134,17 +134,7 @@ export default function BrandsClient() {
     ];
     const filled = required.filter((value) => value.trim().length > 0).length;
     return Math.round((filled / required.length) * 100);
-  }, [
-    marketIndustry,
-    marketContext,
-    customerSegments,
-    targetAudiences,
-    painPoints,
-    positioning,
-    valueProposition,
-    differentiation,
-    capabilities,
-  ]);
+  }, [marketIndustry, marketContext, customerSegments, targetAudiences, painPoints, positioning, valueProposition, differentiation, capabilities]);
 
   async function loadBrands(preferredId?: string) {
     setLoading(true);
@@ -172,6 +162,12 @@ export default function BrandsClient() {
     void loadBrands();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!activeBrandHydrated || activeBrand.id === ACTIVE_BRAND_ALL) return;
+    if (!brands.some((brand) => brand.id === activeBrand.id)) return;
+    if (selectedId !== activeBrand.id) setSelectedId(activeBrand.id);
+  }, [activeBrand.id, activeBrandHydrated, brands, selectedId]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -228,6 +224,12 @@ export default function BrandsClient() {
     };
   }, [selectedId, brands]);
 
+  function selectBrand(nextId: string) {
+    setSelectedId(nextId);
+    const brand = brands.find((item) => item.id === nextId);
+    if (brand) writeActiveBrandSelection({ id: brand.id, name: brand.name });
+  }
+
   async function addBrand() {
     const name = newBrandName.trim();
     if (!name) return;
@@ -236,10 +238,7 @@ export default function BrandsClient() {
     const supabase = createClient();
     const { data, error: insertError } = await supabase
       .from("brands")
-      .insert({
-        name,
-        slug: `${slugify(name)}-${Date.now().toString().slice(-6)}`,
-      })
+      .insert({ name, slug: `${slugify(name)}-${Date.now().toString().slice(-6)}` })
       .select("id")
       .single();
 
@@ -262,6 +261,7 @@ export default function BrandsClient() {
       visual_guideline: { brand_intelligence: {} },
     });
 
+    writeActiveBrandSelection({ id: data.id, name });
     setNewBrandName("");
     setShowAddBrand(false);
     await loadBrands(data.id);
@@ -383,24 +383,17 @@ export default function BrandsClient() {
     }
 
     setGuideline((current) => ({ ...(current ?? { brand_id: selectedBrand.id }), ...payload }));
-    setBrands((current) =>
-      current.map((brand) =>
-        brand.id === selectedBrand.id
-          ? {
-              ...brand,
-              website: website.trim() || null,
-              positioning: positioning.trim() || null,
-              description: valueProposition.trim() || brand.description,
-            }
-          : brand,
-      ),
-    );
+    setBrands((current) => current.map((brand) => brand.id === selectedBrand.id ? {
+      ...brand,
+      website: website.trim() || null,
+      positioning: positioning.trim() || null,
+      description: valueProposition.trim() || brand.description,
+    } : brand));
     setMessage("Brand Intelligence tersimpan dan akan dipakai otomatis oleh AI saat membuat brief.");
     setSaving(false);
   }
 
-  const inputClass =
-    "w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-50";
+  const inputClass = "w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-50";
   const textareaClass = `${inputClass} min-h-28 resize-y`;
 
   return (
@@ -410,29 +403,26 @@ export default function BrandsClient() {
         <div className="mx-auto max-w-7xl">
           <header className="mb-6 flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600">Brand workspace</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600">Brand workspace</p>
+                {activeBrandHydrated && activeBrand.id !== ACTIVE_BRAND_ALL && (
+                  <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">Active: {activeBrand.name}</span>
+                )}
+              </div>
               <h1 className="mt-1.5 text-3xl font-bold tracking-tight text-slate-950">Brand Intelligence</h1>
               <p className="mt-1.5 max-w-3xl text-sm leading-6 text-slate-500">
-                Simpan pemahaman Market, Customer, Positioning, dan Capabilities sekali per brand. AI akan memakai konteks ini saat riset kasus, membuat Story Angles, dan mengecek alignment brief.
+                Simpan pemahaman Market, Customer, Positioning, dan Capabilities sekali per brand. Brand yang dipilih di sini juga menjadi Active Brand global.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <select
                 value={selectedId}
-                onChange={(event) => setSelectedId(event.target.value)}
+                onChange={(event) => selectBrand(event.target.value)}
                 className="min-w-60 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-800"
               >
-                {brands.map((brand) => (
-                  <option key={brand.id} value={brand.id}>{brand.name}</option>
-                ))}
+                {brands.map((brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}
               </select>
-              <button
-                type="button"
-                onClick={() => setShowAddBrand((value) => !value)}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                + Add Brand
-              </button>
+              <button type="button" onClick={() => setShowAddBrand((value) => !value)} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">+ Add Brand</button>
             </div>
           </header>
 
@@ -442,9 +432,7 @@ export default function BrandsClient() {
                 <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-blue-700">Nama brand baru</label>
                 <input value={newBrandName} onChange={(event) => setNewBrandName(event.target.value)} className={inputClass} placeholder="Contoh: FS Institute" />
               </div>
-              <button type="button" disabled={saving || !newBrandName.trim()} onClick={addBrand} className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
-                Tambahkan Brand
-              </button>
+              <button type="button" disabled={saving || !newBrandName.trim()} onClick={addBrand} className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">Tambahkan Brand</button>
             </div>
           )}
 
@@ -465,143 +453,60 @@ export default function BrandsClient() {
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Fast onboarding</p>
                       <h2 className="mt-1 text-lg font-semibold text-slate-950">Upload file brand</h2>
-                      <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                        Upload company profile, brand guideline, strategy deck yang sudah diexport ke PDF, atau file teks. AI akan mengekstrak STP + capabilities lalu mengisi form di bawah untuk direview manusia.
-                      </p>
+                      <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">Upload company profile, brand guideline, strategy deck yang sudah diexport ke PDF, atau file teks. AI akan mengekstrak STP + capabilities lalu mengisi form di bawah untuk direview manusia.</p>
                     </div>
                     <span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">Human review required</span>
                   </div>
-
                   <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5">
-                    <input
-                      type="file"
-                      multiple
-                      accept=".pdf,.txt,.md,.csv,.json,.html,.xml,application/pdf,text/plain,text/csv,application/json"
-                      onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
-                      className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-lg file:border-0 file:bg-slate-950 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-slate-800"
-                    />
+                    <input type="file" multiple accept=".pdf,.txt,.md,.csv,.json,.html,.xml,application/pdf,text/plain,text/csv,application/json" onChange={(event) => setFiles(Array.from(event.target.files ?? []))} className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-lg file:border-0 file:bg-slate-950 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-slate-800" />
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {files.map((file) => (
-                        <span key={`${file.name}-${file.size}`} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">{file.name}</span>
-                      ))}
+                      {files.map((file) => <span key={`${file.name}-${file.size}`} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">{file.name}</span>)}
                     </div>
                     <p className="mt-3 text-xs leading-5 text-slate-400">PDF memberi hasil terbaik karena Gemini dapat memahami layout, tabel, dan visual. Untuk DOCX/PPTX/XLSX, export ke PDF terlebih dahulu untuk hasil yang paling stabil.</p>
-                    <button
-                      type="button"
-                      onClick={extractFiles}
-                      disabled={extracting || !files.length}
-                      className="mt-4 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-                    >
-                      {extracting ? "AI sedang membaca file..." : "Extract Brand Intelligence with AI"}
-                    </button>
+                    <button type="button" onClick={extractFiles} disabled={extracting || !files.length} className="mt-4 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{extracting ? "AI sedang membaca file..." : "Extract Brand Intelligence with AI"}</button>
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-                  <div className="grid gap-6 lg:grid-cols-2">
-                    <div className="lg:col-span-2">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-600">01 · Understand Market</p>
-                      <h2 className="mt-1 text-lg font-semibold text-slate-950">Market</h2>
-                    </div>
-                    <Field label="Industry / market yang dilayani">
-                      <input className={inputClass} value={marketIndustry} onChange={(e) => setMarketIndustry(e.target.value)} placeholder="Contoh: Professional Training, GRC, Compliance" />
-                    </Field>
-                    <Field label="Website brand">
-                      <input className={inputClass} value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://..." />
-                    </Field>
-                    <Field label="Market context" wide>
-                      <textarea className={textareaClass} value={marketContext} onChange={(e) => setMarketContext(e.target.value)} placeholder="Apa yang sedang berubah di market? Apa isu bisnis yang relevan?" />
-                    </Field>
-                    <Field label="Tren / isu market" hint="Satu poin per baris" wide>
-                      <textarea className={textareaClass} value={marketTrends} onChange={(e) => setMarketTrends(e.target.value)} placeholder="Regulatory pressure meningkat\nAI adoption\nFraud prevention..." />
-                    </Field>
-                  </div>
-                </div>
+                <SectionCard eyebrow="01 · Understand Market" title="Market">
+                  <Field label="Industry / market yang dilayani"><input className={inputClass} value={marketIndustry} onChange={(e) => setMarketIndustry(e.target.value)} placeholder="Contoh: Professional Training, GRC, Compliance" /></Field>
+                  <Field label="Website brand"><input className={inputClass} value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://..." /></Field>
+                  <Field label="Market context" wide><textarea className={textareaClass} value={marketContext} onChange={(e) => setMarketContext(e.target.value)} placeholder="Apa yang sedang berubah di market? Apa isu bisnis yang relevan?" /></Field>
+                  <Field label="Tren / isu market" hint="Satu poin per baris" wide><textarea className={textareaClass} value={marketTrends} onChange={(e) => setMarketTrends(e.target.value)} placeholder="Regulatory pressure meningkat\nAI adoption\nFraud prevention..." /></Field>
+                </SectionCard>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-                  <div className="grid gap-6 lg:grid-cols-2">
-                    <div className="lg:col-span-2">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-600">02 · STP</p>
-                      <h2 className="mt-1 text-lg font-semibold text-slate-950">Customers & Positioning</h2>
-                    </div>
-                    <Field label="Segmentation" hint="Satu segmen per baris">
-                      <textarea className={textareaClass} value={customerSegments} onChange={(e) => setCustomerSegments(e.target.value)} placeholder="Enterprise\nBUMN\nRegulated industries" />
-                    </Field>
-                    <Field label="Targeting / priority audience" hint="Satu audience per baris">
-                      <textarea className={textareaClass} value={targetAudiences} onChange={(e) => setTargetAudiences(e.target.value)} placeholder="Head of Compliance\nRisk Manager\nDirector" />
-                    </Field>
-                    <Field label="Customer problems / jobs-to-be-done" hint="Satu masalah per baris" wide>
-                      <textarea className={textareaClass} value={painPoints} onChange={(e) => setPainPoints(e.target.value)} placeholder="Butuh sistem yang bisa diimplementasikan\nSulit menerjemahkan standar ke proses bisnis..." />
-                    </Field>
-                    <Field label="Positioning">
-                      <textarea className={textareaClass} value={positioning} onChange={(e) => setPositioning(e.target.value)} placeholder="Brand ingin dikenal sebagai apa?" />
-                    </Field>
-                    <Field label="Value proposition">
-                      <textarea className={textareaClass} value={valueProposition} onChange={(e) => setValueProposition(e.target.value)} placeholder="Value yang dijanjikan kepada audience." />
-                    </Field>
-                    <Field label="Differentiation" wide>
-                      <textarea className={textareaClass} value={differentiation} onChange={(e) => setDifferentiation(e.target.value)} placeholder="Apa pembeda utama dibanding alternatif/kompetitor?" />
-                    </Field>
-                    <Field label="Brand POV" wide>
-                      <textarea className={textareaClass} value={brandPov} onChange={(e) => setBrandPov(e.target.value)} placeholder="Sudut pandang khas brand terhadap masalah audience." />
-                    </Field>
-                  </div>
-                </div>
+                <SectionCard eyebrow="02 · STP" title="Customers & Positioning">
+                  <Field label="Segmentation" hint="Satu segmen per baris"><textarea className={textareaClass} value={customerSegments} onChange={(e) => setCustomerSegments(e.target.value)} placeholder="Enterprise\nBUMN\nRegulated industries" /></Field>
+                  <Field label="Targeting / priority audience" hint="Satu audience per baris"><textarea className={textareaClass} value={targetAudiences} onChange={(e) => setTargetAudiences(e.target.value)} placeholder="Head of Compliance\nRisk Manager\nDirector" /></Field>
+                  <Field label="Customer problems / jobs-to-be-done" hint="Satu masalah per baris" wide><textarea className={textareaClass} value={painPoints} onChange={(e) => setPainPoints(e.target.value)} placeholder="Butuh sistem yang bisa diimplementasikan\nSulit menerjemahkan standar ke proses bisnis..." /></Field>
+                  <Field label="Positioning"><textarea className={textareaClass} value={positioning} onChange={(e) => setPositioning(e.target.value)} placeholder="Brand ingin dikenal sebagai apa?" /></Field>
+                  <Field label="Value proposition"><textarea className={textareaClass} value={valueProposition} onChange={(e) => setValueProposition(e.target.value)} placeholder="Value yang dijanjikan kepada audience." /></Field>
+                  <Field label="Differentiation" wide><textarea className={textareaClass} value={differentiation} onChange={(e) => setDifferentiation(e.target.value)} placeholder="Apa pembeda utama dibanding alternatif/kompetitor?" /></Field>
+                  <Field label="Brand POV" wide><textarea className={textareaClass} value={brandPov} onChange={(e) => setBrandPov(e.target.value)} placeholder="Sudut pandang khas brand terhadap masalah audience." /></Field>
+                </SectionCard>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-                  <div className="grid gap-6 lg:grid-cols-2">
-                    <div className="lg:col-span-2">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-600">03 · Capabilities</p>
-                      <h2 className="mt-1 text-lg font-semibold text-slate-950">Capabilities, Proof & Guardrails</h2>
-                    </div>
-                    <Field label="Core capabilities / expertise" hint="Satu capability per baris">
-                      <textarea className={textareaClass} value={capabilities} onChange={(e) => setCapabilities(e.target.value)} placeholder="ISO Training\nGovernance\nRisk Management" />
-                    </Field>
-                    <Field label="Proof points" hint="Client, case, certification, product, evidence">
-                      <textarea className={textareaClass} value={proofPoints} onChange={(e) => setProofPoints(e.target.value)} placeholder="Daftar bukti yang aman digunakan oleh AI." />
-                    </Field>
-                    <Field label="Allowed claims">
-                      <textarea className={textareaClass} value={allowedClaims} onChange={(e) => setAllowedClaims(e.target.value)} placeholder="Klaim yang boleh dibuat." />
-                    </Field>
-                    <Field label="Prohibited claims">
-                      <textarea className={textareaClass} value={prohibitedClaims} onChange={(e) => setProhibitedClaims(e.target.value)} placeholder="Klaim yang tidak boleh dibuat." />
-                    </Field>
-                    <Field label="Communication do's">
-                      <textarea className={textareaClass} value={communicationDos} onChange={(e) => setCommunicationDos(e.target.value)} placeholder="Apa yang perlu selalu dilakukan dalam komunikasi brand?" />
-                    </Field>
-                    <Field label="Communication don'ts">
-                      <textarea className={textareaClass} value={communicationDonts} onChange={(e) => setCommunicationDonts(e.target.value)} placeholder="Apa yang harus dihindari?" />
-                    </Field>
-                  </div>
-                </div>
+                <SectionCard eyebrow="03 · Capabilities" title="Capabilities, Proof & Guardrails">
+                  <Field label="Core capabilities / expertise" hint="Satu capability per baris"><textarea className={textareaClass} value={capabilities} onChange={(e) => setCapabilities(e.target.value)} placeholder="ISO Training\nGovernance\nRisk Management" /></Field>
+                  <Field label="Proof points" hint="Client, case, certification, product, evidence"><textarea className={textareaClass} value={proofPoints} onChange={(e) => setProofPoints(e.target.value)} placeholder="Daftar bukti yang aman digunakan oleh AI." /></Field>
+                  <Field label="Allowed claims"><textarea className={textareaClass} value={allowedClaims} onChange={(e) => setAllowedClaims(e.target.value)} placeholder="Klaim yang boleh dibuat." /></Field>
+                  <Field label="Prohibited claims"><textarea className={textareaClass} value={prohibitedClaims} onChange={(e) => setProhibitedClaims(e.target.value)} placeholder="Klaim yang tidak boleh dibuat." /></Field>
+                  <Field label="Communication do's"><textarea className={textareaClass} value={communicationDos} onChange={(e) => setCommunicationDos(e.target.value)} placeholder="Apa yang perlu selalu dilakukan dalam komunikasi brand?" /></Field>
+                  <Field label="Communication don'ts"><textarea className={textareaClass} value={communicationDonts} onChange={(e) => setCommunicationDonts(e.target.value)} placeholder="Apa yang harus dihindari?" /></Field>
+                </SectionCard>
 
-                {(error || message) && (
-                  <div className={`rounded-2xl px-4 py-3 text-sm ${error ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>
-                    {error || message}
-                  </div>
-                )}
+                {(error || message) && <div className={`rounded-2xl px-4 py-3 text-sm ${error ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>{error || message}</div>}
 
                 <div className="sticky bottom-4 z-10 flex justify-end">
-                  <button type="button" onClick={save} disabled={saving} className="rounded-xl bg-slate-950 px-6 py-3.5 text-sm font-semibold text-white shadow-lg hover:bg-slate-800 disabled:opacity-50">
-                    {saving ? "Menyimpan..." : "Save Brand Intelligence"}
-                  </button>
+                  <button type="button" onClick={save} disabled={saving} className="rounded-xl bg-slate-950 px-6 py-3.5 text-sm font-semibold text-white shadow-lg hover:bg-slate-800 disabled:opacity-50">{saving ? "Menyimpan..." : "Save Brand Intelligence"}</button>
                 </div>
               </section>
 
               <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Completeness</p>
-                      <p className="mt-1 text-2xl font-bold text-slate-950">{completion}%</p>
-                    </div>
-                    <div className="h-14 w-14 rounded-full border-4 border-blue-100 p-1">
-                      <div className="flex h-full w-full items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">{completion}</div>
-                    </div>
+                    <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Completeness</p><p className="mt-1 text-2xl font-bold text-slate-950">{completion}%</p></div>
+                    <div className="h-14 w-14 rounded-full border-4 border-blue-100 p-1"><div className="flex h-full w-full items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">{completion}</div></div>
                   </div>
-                  <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
-                    <div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${completion}%` }} />
-                  </div>
+                  <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${completion}%` }} /></div>
                   <p className="mt-3 text-xs leading-5 text-slate-500">Semakin lengkap konteks ini, semakin presisi AI memilih kasus, angle, audience relevance, dan capability bridge.</p>
                 </div>
 
@@ -618,23 +523,14 @@ export default function BrandsClient() {
                 {sourceFiles.length > 0 && (
                   <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Source files</p>
-                    <div className="mt-3 space-y-3">
-                      {sourceFiles.map((source, index) => (
-                        <div key={`${source.name}-${index}`} className="rounded-xl bg-slate-50 p-3">
-                          <p className="text-sm font-semibold text-slate-800">{source.name}</p>
-                          {source.notes && <p className="mt-1 text-xs leading-5 text-slate-500">{source.notes}</p>}
-                        </div>
-                      ))}
-                    </div>
+                    <div className="mt-3 space-y-3">{sourceFiles.map((source, index) => <div key={`${source.name}-${index}`} className="rounded-xl bg-slate-50 p-3"><p className="text-sm font-semibold text-slate-800">{source.name}</p>{source.notes && <p className="mt-1 text-xs leading-5 text-slate-500">{source.notes}</p>}</div>)}</div>
                   </div>
                 )}
 
                 {confidenceNotes.length > 0 && (
                   <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
                     <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-700">Needs human review</p>
-                    <ul className="mt-3 space-y-2 text-xs leading-5 text-amber-800">
-                      {confidenceNotes.map((note) => <li key={note}>• {note}</li>)}
-                    </ul>
+                    <ul className="mt-3 space-y-2 text-xs leading-5 text-amber-800">{confidenceNotes.map((note) => <li key={note}>• {note}</li>)}</ul>
                   </div>
                 )}
               </aside>
@@ -646,13 +542,21 @@ export default function BrandsClient() {
   );
 }
 
+function SectionCard({ eyebrow, title, children }: { eyebrow: string; title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="lg:col-span-2"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-600">{eyebrow}</p><h2 className="mt-1 text-lg font-semibold text-slate-950">{title}</h2></div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function Field({ label, hint, wide = false, children }: { label: string; hint?: string; wide?: boolean; children: React.ReactNode }) {
   return (
     <div className={wide ? "lg:col-span-2" : ""}>
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <label className="text-sm font-semibold text-slate-800">{label}</label>
-        {hint && <span className="text-[11px] text-slate-400">{hint}</span>}
-      </div>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><label className="text-sm font-semibold text-slate-800">{label}</label>{hint && <span className="text-[11px] text-slate-400">{hint}</span>}</div>
       {children}
     </div>
   );
