@@ -52,6 +52,8 @@ type Synthesis = {
     mechanism: string;
     outcome: string;
     executive_implication: string;
+    topic_relevance_score: number;
+    campaign_alignment_score: number;
     relevance_score: number;
     credibility_score: number;
     tension_score: number;
@@ -144,6 +146,9 @@ export async function POST(request: Request) {
       user: `
 TANGGAL: ${today}
 
+TOPIC LOCK — HARD CONSTRAINT:
+${input.topic}
+
 QUICK CAMPAIGN BRIEF:
 ${compactJson(input)}
 
@@ -156,13 +161,17 @@ ${compactJson(existingGuideline ? {
   brand_pov: existingGuideline.brand_pov,
 } : null)}
 
-Buat tepat 4 query web untuk menemukan kasus perusahaan/organisasi nyata yang relevan dengan topik dan business problem campaign.
-1. Query recent incident/failure/enforcement/strategic tension.
-2. Query official/regulator/company evidence.
-3. Query implementation/turnaround/successful response.
-4. Query benchmark case yang lebih lama bila punya mekanisme kuat.
+Buat tepat 4 query web untuk menemukan kasus perusahaan/organisasi nyata yang relevan dengan TOPIC LOCK dan business problem campaign.
+TOPIC LOCK adalah subjek kampanye yang diminta user dan tidak boleh diganti oleh brand expertise, positioning, atau editorial knowledge.
+Brand context hanya membantu memilih konteks bisnis, audience, sudut pandang, dan jenis kasus; brand context TIDAK BOLEH mengganti topik.
+Setiap query wajib memuat topik utama atau sinonim/konsep langsungnya.
+1. Query recent incident/failure/enforcement/strategic tension yang langsung berkaitan dengan topik.
+2. Query official/regulator/company evidence yang langsung berkaitan dengan topik.
+3. Query implementation/turnaround/successful response yang langsung berkaitan dengan topik.
+4. Query benchmark case yang lebih lama bila punya mechanism kuat dan tetap langsung berkaitan dengan topik.
 
 Query harus mencari nama perusahaan, kejadian konkret, konsekuensi, keputusan, dan mechanism. Jangan tulis copy sosial media.
+Jika brand expertise bertentangan dengan TOPIC LOCK, prioritaskan TOPIC LOCK.
 `,
       temperature: 0.2,
     });
@@ -187,20 +196,38 @@ Query harus mencari nama perusahaan, kejadian konkret, konsekuensi, keputusan, d
 EDITORIAL KNOWLEDGE BASE:
 ${knowledge}
 
+TOPIC LOCK — USER REQUEST, HARD CONSTRAINT:
+${input.topic}
+
 QUICK INPUT — ini sengaja singkat. Bangun konteks editorial yang dibutuhkan secara konservatif:
 ${compactJson(input)}
 
-EXISTING BRAND INTELLIGENCE — gunakan jika tersedia, jangan bertentangan tanpa alasan:
+EXISTING BRAND INTELLIGENCE — gunakan jika tersedia untuk menentukan HOW/brand fit, bukan WHAT/topik:
 ${compactJson(existingGuideline ? { brand: existingBrand, guideline: existingGuideline } : null)}
+
+IMPORTANT PRIORITY ORDER:
+1. TOPIC LOCK dari user.
+2. Target audience + objective dari user.
+3. Evidence dari live web sources.
+4. Brand intelligence sebagai guardrail positioning, tone, POV, capability bridge.
+5. Editorial knowledge sebagai storytelling method.
+Brand intelligence TIDAK BOLEH mengganti topik user. Contoh: jika user meminta “AI untuk bisnis”, jangan mengubahnya menjadi manajemen risiko, ISO, governance, fraud, atau topik expertise brand lain kecuali user secara eksplisit meminta hubungan tersebut.
 
 LIVE WEB SOURCES — fakta kasus hanya boleh berasal dari katalog ini:
 ${sourceCatalog}
 
 TUGAS:
 1. Bentuk hidden brand profile yang cukup untuk menulis konten berkualitas. Ini adalah editorial inference, bukan klaim fakta perusahaan.
-2. Turunkan campaign logic: desired perception, business problem, key message, funnel stage.
-3. Pilih 3-4 kasus nyata dengan tension + mechanism kuat. Setiap kasus idealnya punya >=2 source refs.
-4. Buat tepat 5 content angles yang case-led dan non-generic.
+2. Turunkan campaign logic: desired perception, business problem, key message, funnel stage. Campaign logic wajib tetap menjawab TOPIC LOCK.
+3. Pilih 3-4 kasus nyata dengan tension + mechanism kuat. Setiap kasus idealnya punya >=2 source refs dan wajib relevan langsung terhadap TOPIC LOCK.
+4. Buat tepat 5 content angles yang case-led dan non-generic serta semuanya tetap berada di TOPIC LOCK.
+
+TOPIC RELEVANCE SCORING — WAJIB:
+- topic_relevance_score 9-10 = kasus secara langsung membahas, menerapkan, mengalami, atau memberi bukti konkret tentang TOPIC LOCK.
+- topic_relevance_score 7-8 = kasus sangat dekat dan mekanismenya jelas dapat menjelaskan TOPIC LOCK tanpa lompatan besar.
+- topic_relevance_score 0-6 = terlalu jauh, hanya cocok karena brand expertise, atau membutuhkan lompatan interpretasi. KASUS INI HARUS DIANGGAP TIDAK LAYAK.
+- campaign_alignment_score memakai aturan yang sama terhadap kombinasi TOPIC LOCK + objective + audience.
+Jangan menaikkan skor hanya karena brand_fit tinggi.
 
 ATURAN KUALITAS:
 - Jangan membuat ide dari topik saja. Wajib Case/Evidence → Tension → Mechanism → Insight → Brand POV.
@@ -213,7 +240,7 @@ ATURAN KUALITAS:
 - Extra context user: ${input.extraContext || "Tidak ada."}
 - Brand promotion tidak boleh muncul terlalu cepat; insight harus earned.
 `,
-      temperature: 0.35,
+      temperature: 0.25,
     });
 
     const synthesisCases = Array.isArray(synthesis?.cases) ? synthesis.cases : [];
@@ -238,9 +265,23 @@ ATURAN KUALITAS:
       return { item, mappedSources, avg };
     });
 
-    const eligible = normalizedCases.filter((c) => c.mappedSources.length >= 2 && c.item.confidence !== "low");
-    if (eligible.length < 2) return errorJson("AI belum menemukan minimal dua kasus yang cukup terverifikasi. Coba perjelas topik campaign.", 502);
-    const best = [...eligible].sort((a, b) => b.avg - a.avg)[0];
+    const eligible = normalizedCases.filter((c) =>
+      c.mappedSources.length >= 2 &&
+      c.item.confidence !== "low" &&
+      clampScore(c.item.topic_relevance_score) >= 7 &&
+      clampScore(c.item.campaign_alignment_score) >= 7
+    );
+    if (eligible.length < 2) {
+      return errorJson(
+        `AI belum menemukan minimal dua kasus yang cukup relevan dengan topik “${input.topic}”. Brand context tidak boleh menggantikan topik. Silakan generate ulang atau perjelas topik campaign.`,
+        502,
+      );
+    }
+    const best = [...eligible].sort((a, b) => {
+      const aScore = average([a.avg, clampScore(a.item.topic_relevance_score), clampScore(a.item.campaign_alignment_score)]);
+      const bScore = average([b.avg, clampScore(b.item.topic_relevance_score), clampScore(b.item.campaign_alignment_score)]);
+      return bScore - aScore;
+    })[0];
 
     let brandId = existingBrand?.id as string | undefined;
     if (!brandId) {

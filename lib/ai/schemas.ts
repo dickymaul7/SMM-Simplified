@@ -65,8 +65,9 @@ export const angleSynthesisSchema = {
         additionalProperties: false,
         required: [
           "key", "company_name", "case_title", "case_summary", "business_problem", "tension",
-          "decision_or_move", "mechanism", "outcome", "executive_implication", "relevance_score",
-          "credibility_score", "tension_score", "executive_value_score", "brand_fit_score", "confidence", "sources"
+          "decision_or_move", "mechanism", "outcome", "executive_implication", "topic_relevance_score",
+          "campaign_alignment_score", "relevance_score", "credibility_score", "tension_score",
+          "executive_value_score", "brand_fit_score", "confidence", "sources"
         ],
         properties: {
           key: { type: "string" },
@@ -79,6 +80,8 @@ export const angleSynthesisSchema = {
           mechanism: { type: "string" },
           outcome: { type: "string" },
           executive_implication: { type: "string" },
+          topic_relevance_score: score,
+          campaign_alignment_score: score,
           relevance_score: score,
           credibility_score: score,
           tension_score: score,
