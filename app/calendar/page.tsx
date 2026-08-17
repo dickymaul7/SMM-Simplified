@@ -1,7 +1,7 @@
-import CalendarClient from "@/components/pages/calendar-client";
+import CalendarExpansionClient from "@/components/pages/calendar-expansion-client";
 
 export const dynamic = "force-dynamic";
 
 export default function CalendarPage() {
-  return <CalendarClient />;
+  return <CalendarExpansionClient />;
 }
