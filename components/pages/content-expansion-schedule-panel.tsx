@@ -113,7 +113,7 @@ export default function ContentExpansionSchedulePanel() {
   }
 
   return (
-    <section className="mx-auto max-w-6xl px-5 pb-10 lg:px-8">
+    <section className="app-workspace mx-auto max-w-6xl px-5 pb-10 lg:px-8">
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
         <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
           <div>
