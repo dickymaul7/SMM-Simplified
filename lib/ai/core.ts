@@ -6,13 +6,18 @@ export function getAIModel() {
 }
 
 export async function loadStorytellingKnowledge() {
-  const file = path.join(
-    process.cwd(),
-    "public",
-    "knowledge",
-    "storytelling_knowledge_base.md",
-  );
-  return fs.readFile(file, "utf8");
+  const knowledgeDir = path.join(process.cwd(), "public", "knowledge");
+  const [storytelling, copywriting] = await Promise.all([
+    fs.readFile(path.join(knowledgeDir, "storytelling_knowledge_base.md"), "utf8"),
+    fs.readFile(path.join(knowledgeDir, "copywriting_knowledge_base.md"), "utf8"),
+  ]);
+
+  return [
+    "# STORYTELLING KNOWLEDGE BASE",
+    storytelling,
+    "\n\n# COPYWRITING & RETENTION KNOWLEDGE BASE",
+    copywriting,
+  ].join("\n\n");
 }
 
 export function compactJson(value: unknown) {
