@@ -84,7 +84,7 @@ export async function generateBrief({
 
   return createStructuredJson<BriefOutput>({
     schema: briefSchema as unknown as Record<string, unknown>,
-    system: "Kamu adalah elite B2B case-study storyteller dan senior content strategist. Semua output human-facing wajib Bahasa Indonesia. Kamu menulis brief eksekutif yang evidence-led, case-first, dan tidak terasa seperti template AI.",
+    system: "Kamu adalah elite B2B case-study storyteller, senior content strategist, dan senior copywriter/editorial director. Semua output human-facing wajib Bahasa Indonesia. Kamu menulis brief eksekutif yang evidence-led, case-first, high-retention, dan tidak terasa seperti template AI. Copywriting dipakai untuk meningkatkan perhatian, curiosity, narrative momentum, readability, dan payoff — bukan untuk mengubah fakta atau membuat clickbait.",
     user: `
 EDITORIAL KNOWLEDGE BASE:
 ${knowledge}
@@ -98,6 +98,20 @@ ${sourceList}
 TASK:
 ${currentBrief ? "Perbaiki brief yang ada secara targeted." : "Buat full storytelling brief."}
 ${formatInstruction}
+
+COPYWRITER LAYER — WAJIB DITERAPKAN:
+1. Temukan satu curiosity gap utama yang legitimate dari kasus/evidence. Jangan membuat curiosity dari klaim palsu.
+2. Hook harus spesifik terhadap kasus dan memberi alasan kuat untuk lanjut membaca/menonton.
+3. Beri audience implicit promise tentang insight yang akan mereka dapatkan.
+4. Setiap slide/scene hanya punya satu pekerjaan utama dan harus membuat cerita bergerak maju.
+5. Gunakan open loop secara terkontrol lalu bayar dengan reveal/mechanism/payoff. Jangan meninggalkan pertanyaan hanya demi memaksa swipe.
+6. Variasikan ritme kalimat. Potong filler, jargon, dan kalimat yang terdengar seperti AI.
+7. Supporting copy tidak boleh sekadar mengulang headline.
+8. Headline harus kuat walaupun dibaca tanpa supporting copy.
+9. Gunakan specificity, contradiction, decision tension, unexpected consequence, dan concrete business stakes bila tersedia di evidence.
+10. Brand/CTA baru muncul setelah audience menerima value yang cukup.
+11. Target editorialnya adalah membuat audience merasa "saya ingin tahu kelanjutannya" lalu "insight ini memang layak saya baca sampai selesai".
+12. Jangan menjanjikan atau mengarang hasil performa seperti watch time, completion rate, engagement, atau conversion.
 
 CASE-FIRST RULE — WAJIB ketika verified case kuat tersedia:
 1. Slide/scene 1 membuka dari KASUS NYATA, bukan teori, definisi, mitos umum, atau promosi.
@@ -128,7 +142,7 @@ ${revisionBlock}${currentBlock}${userBlock}
 export async function reviewBrief({ knowledge, context, brief }: { knowledge: string; context: unknown; brief: BriefOutput }) {
   return createStructuredJson<QualityReview>({
     schema: qualitySchema as unknown as Record<string, unknown>,
-    system: "Kamu adalah executive editorial director yang keras. Jangan memberi skor tinggi hanya karena brief terlihat rapi. Tolak konten generik dan unsupported.",
+    system: "Kamu adalah executive editorial director sekaligus senior copywriter yang keras. Jangan memberi skor tinggi hanya karena brief terlihat rapi. Tolak konten generik, unsupported, dan copy yang hanya terdengar pintar.",
     user: `
 EDITORIAL STANDARD:
 ${knowledge}
@@ -154,16 +168,32 @@ Beri skor 0-10 secara ketat untuk:
 - Evidence Safety
 
 Skor 9+ berarti publish-worthy setelah human fact check, bukan sekadar “bagus”.
+
+COPYWRITING REVIEW — WAJIB:
+- Hook harus memiliki legitimate curiosity gap dan specificity.
+- Opening harus memberi alasan jelas untuk continue reading/watching.
+- Story harus memiliki narrative momentum: setiap slide/scene membuka, memperdalam, mengungkap, atau membayar informasi.
+- Open loop harus memiliki payoff; jangan memakai cliffhanger kosong.
+- Headline harus kuat tanpa supporting copy.
+- Supporting copy harus mendorong cerita, bukan mengulang headline.
+- Sentence craft harus terasa manusiawi: konkret, aktif, ritmis, dan minim filler.
+- Tidak boleh terasa seperti template AI atau copy generik B2B.
+- CTA harus merupakan konsekuensi natural dari insight.
+
 Penalti besar jika:
 - verified case kuat tersedia tapi opening masih generik;
-- hook melebih-lebihkan evidence;
+- hook melebih-lebihkan evidence atau menggunakan clickbait;
+- tidak ada curiosity gap yang legitimate;
+- story momentum datar atau slide repetitif;
 - mekanisme HOW/WHY lemah;
+- payoff tidak menjawab promise/open loop;
 - brand selling muncul terlalu cepat;
 - insight dapat ditulis tanpa riset;
 - slide repetitif;
-- visual direction terlalu abstrak.
+- visual direction terlalu abstrak;
+- kalimat penuh filler, jargon, atau frasa template AI.
 
-required_revisions harus berupa instruksi konkret per bagian/slide.
+required_revisions harus berupa instruksi konkret per bagian/slide, termasuk rewrite direction untuk hook atau bagian dengan retention lemah.
 `,
     temperature: 0.15,
   });
