@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -13,6 +14,17 @@ export default function TaskForcePanel() {
   const [member, setMember] = useState<Member | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [error, setError] = useState("");
+  const [target, setTarget] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const workspace = document.querySelector("main.app-workspace > div");
+    if (!workspace) return;
+    const slot = document.createElement("div");
+    slot.id = "overview-task-force-slot";
+    workspace.insertBefore(slot, workspace.firstChild);
+    setTarget(slot);
+    return () => slot.remove();
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -38,10 +50,12 @@ export default function TaskForcePanel() {
   const counts = useMemo(() => ({ todo: tasks.filter(t => t.status === "todo").length, in_progress: tasks.filter(t => t.status === "in_progress").length, review: tasks.filter(t => t.status === "review").length, completed: tasks.filter(t => t.status === "completed").length }), [tasks]);
   if (!member && !error) return null;
 
-  return <section className="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
+  const panel = <section className="mb-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-5 md:px-6"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-600">Task Force</p><h2 className="mt-1 text-lg font-semibold text-slate-950">{member ? `Pekerjaan ${member.display_name}` : "Task Force"}</h2><p className="mt-1 text-xs text-slate-400">Role: {member?.role.replaceAll("_", " ")}</p></div><button onClick={() => router.push("/calendar?task=todo")} className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-semibold text-white">Open My Tasks →</button></div>
     {error ? <div className="px-5 py-5 text-sm text-red-600">{error}</div> : <div className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-4 md:p-6">
       {(["todo","in_progress","review","completed"] as const).map((status) => <button key={status} onClick={() => router.push(`/calendar?task=${status}`)} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:-translate-y-0.5 hover:bg-white hover:shadow-sm"><p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{labels[status]}</p><p className="mt-1 text-3xl font-bold text-slate-950">{counts[status]}</p><p className="mt-1 text-xs text-slate-500">{status === "todo" ? "Pekerjaan yang harus dikerjakan" : status === "in_progress" ? "Sedang dikerjakan" : status === "review" ? "Menunggu review" : "Sudah selesai"}</p></button>)}
     </div>}
   </section>;
+
+  return target ? createPortal(panel, target) : null;
 }
