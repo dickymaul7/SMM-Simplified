@@ -5,10 +5,15 @@ create table if not exists public.team_members (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null unique references auth.users(id) on delete cascade,
   display_name text not null,
-  role text not null default 'member' check (role in ('superadmin','content_writer','designer','video_editor','member')),
+  role text not null default 'member' check (role in ('superadmin','content_writer','content_creator','designer','video_editor','member')),
   active boolean not null default true,
   created_at timestamptz not null default now()
 );
+
+-- Extend the role constraint for existing installations.
+alter table public.team_members drop constraint if exists team_members_role_check;
+alter table public.team_members add constraint team_members_role_check
+  check (role in ('superadmin','content_writer','content_creator','designer','video_editor','member'));
 
 create table if not exists public.task_assignments (
   id uuid primary key default gen_random_uuid(),
@@ -28,12 +33,10 @@ create index if not exists task_assignments_brief_idx on public.task_assignments
 alter table public.team_members enable row level security;
 alter table public.task_assignments enable row level security;
 
--- Team members can be read by authenticated users so assignment dropdowns can work.
 drop policy if exists team_members_select_authenticated on public.team_members;
 create policy team_members_select_authenticated on public.team_members
 for select to authenticated using (active = true);
 
--- Authenticated users can see tasks assigned to them; superadmins can see all tasks.
 drop policy if exists task_assignments_select on public.task_assignments;
 create policy task_assignments_select on public.task_assignments
 for select to authenticated using (
@@ -41,7 +44,6 @@ for select to authenticated using (
   or exists (select 1 from public.team_members where user_id = auth.uid() and role = 'superadmin' and active = true)
 );
 
--- Superadmins can create assignments.
 drop policy if exists task_assignments_insert_superadmin on public.task_assignments;
 create policy task_assignments_insert_superadmin on public.task_assignments
 for insert to authenticated with check (
@@ -49,7 +51,6 @@ for insert to authenticated with check (
   and exists (select 1 from public.team_members where user_id = auth.uid() and role = 'superadmin' and active = true)
 );
 
--- Assignees can update their own task status; superadmins can update any task.
 drop policy if exists task_assignments_update on public.task_assignments;
 create policy task_assignments_update on public.task_assignments
 for update to authenticated using (
