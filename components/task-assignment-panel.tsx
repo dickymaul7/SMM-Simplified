@@ -23,7 +23,7 @@ const labels = {
   completed: "Completed",
 };
 
-function findQuickMoveTarget() {
+function findQuickMoveTarget(): HTMLElement | null {
   const heading = Array.from(document.querySelectorAll("h2")).find(
     (node) => node.textContent?.trim() === "Quick Move",
   );
@@ -118,83 +118,81 @@ export default function TaskAssignmentPanel() {
       filter
         ? tasks.filter((task) => task.status === filter && task.assigned_to === member?.id)
         : [],
-    [tasks, filter, member],
+    [filter, tasks, member?.id],
   );
 
-  if (!portalTarget || !member) return null;
+  async function assignTask() {
+    if (!briefId || !assignee) {
+      setError("Pilih content dan member terlebih dahulu.");
+      return;
+    }
 
-  async function assign() {
-    if (!briefId || !assignee || !isSuperadmin) return;
-
-    setError("");
-    setMessage("");
-
-    const selected = briefs.find((brief) => brief.id === briefId);
+    const brief = briefs.find((item) => item.id === briefId);
     const supabase = createClient();
-    const { data, error: insertError } = await supabase
-      .from("task_assignments")
-      .insert({
+    const { error: insertError } = await supabase.from("task_assignments").upsert(
+      {
         brief_id: briefId,
         assigned_to: assignee,
-        assigned_by: member.user_id,
+        assigned_by: member?.id ?? null,
         status: "todo",
         priority: "normal",
-        due_date: selected?.scheduled_for ?? null,
-      })
-      .select("id,brief_id,assigned_to,status,priority,due_date")
-      .single();
+        due_date: brief?.scheduled_for ?? null,
+      },
+      { onConflict: "brief_id,assigned_to" },
+    );
 
     if (insertError) {
       setError(insertError.message);
       return;
     }
 
-    setTasks((current) => [...current, data as Task]);
-    setMessage("Task berhasil di-assign ke member.");
+    setMessage("Task berhasil di-assign.");
+    setError("");
     setBriefId("");
     setAssignee("");
+    await load();
   }
 
-  async function changeStatus(id: string, status: Task["status"]) {
+  async function updateStatus(taskId: string, status: Task["status"]) {
     const supabase = createClient();
     const { error: updateError } = await supabase
       .from("task_assignments")
       .update({ status, updated_at: new Date().toISOString() })
-      .eq("id", id);
+      .eq("id", taskId);
 
     if (updateError) {
       setError(updateError.message);
       return;
     }
 
-    setTasks((current) => current.map((task) => (task.id === id ? { ...task, status } : task)));
+    await load();
   }
 
-  const content = (
+  const panel = (
     <div className="mt-5 border-t border-slate-200 pt-5">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-600">Task Assignment</p>
-          <h3 className="mt-1 text-sm font-semibold text-slate-950">
-            {filter ? `My ${labels[filter]} Tasks` : "Assign Task"}
-          </h3>
+          <p className="text-sm font-semibold text-slate-900">Task Assignment</p>
+          <p className="mt-1 text-xs text-slate-500">
+            {isSuperadmin ? "Assign content calendar ke member tim." : "Task yang diberikan kepada akun ini."}
+          </p>
         </div>
-        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold text-slate-500">
-          {isSuperadmin ? "Superadmin" : member.role.replaceAll("_", " ")}
+        <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-600">
+          {focusedTasks.length} task aktif
         </span>
       </div>
 
-      {isSuperadmin && !filter && (
-        <div className="mt-4 space-y-2.5">
+      {isSuperadmin && (
+        <div className="mt-4 grid gap-3">
           <select
             value={briefId}
             onChange={(event) => setBriefId(event.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm"
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none"
           >
-            <option value="">Pilih content...</option>
+            <option value="">Pilih content calendar</option>
             {briefs.map((brief) => (
               <option key={brief.id} value={brief.id}>
-                {brief.title} · {brief.scheduled_for}
+                {brief.title}
               </option>
             ))}
           </select>
@@ -202,60 +200,58 @@ export default function TaskAssignmentPanel() {
           <select
             value={assignee}
             onChange={(event) => setAssignee(event.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm"
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none"
           >
-            <option value="">Assign ke member...</option>
+            <option value="">Assign ke member</option>
             {members
-              .filter((memberRow) => memberRow.role !== "superadmin")
-              .map((memberRow) => (
-                <option key={memberRow.id} value={memberRow.id}>
-                  {memberRow.display_name} · {memberRow.role.replaceAll("_", " ")}
+              .filter((item) => item.role !== "superadmin")
+              .map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.display_name} · {item.role}
                 </option>
               ))}
           </select>
 
           <button
-            disabled={!briefId || !assignee}
-            onClick={assign}
-            className="w-full rounded-xl bg-slate-950 px-3 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+            type="button"
+            onClick={assignTask}
+            className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
           >
             Assign Task
           </button>
         </div>
       )}
 
-      {(message || error) && (
-        <div className={`mt-3 rounded-xl px-3 py-2 text-xs ${error ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>
-          {error || message}
-        </div>
-      )}
+      {message && <p className="mt-3 text-xs font-medium text-emerald-600">{message}</p>}
+      {error && <p className="mt-3 text-xs font-medium text-red-600">{error}</p>}
 
-      {filter && (
+      {focusedTasks.length > 0 && (
         <div className="mt-4 space-y-2">
-          {focusedTasks.length === 0 ? (
-            <p className="text-sm text-slate-500">Tidak ada task dengan status ini.</p>
-          ) : (
-            focusedTasks.map((task) => (
-              <div key={task.id} className="rounded-xl border border-slate-200 p-3">
-                <p className="text-xs font-semibold text-slate-900">Content #{task.brief_id.slice(0, 8)}</p>
-                <p className="mt-1 text-[11px] text-slate-400">Deadline: {task.due_date || "No deadline"}</p>
+          {focusedTasks.map((task) => (
+            <div key={task.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-semibold text-slate-800">
+                  {briefs.find((brief) => brief.id === task.brief_id)?.title || "Assigned content"}
+                </p>
                 <select
                   value={task.status}
-                  onChange={(event) => changeStatus(task.id, event.target.value as Task["status"])}
-                  className="mt-2 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+                  onChange={(event) => updateStatus(task.id, event.target.value as Task["status"])}
+                  className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600"
                 >
-                  <option value="todo">To-do</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="review">Review</option>
-                  <option value="completed">Completed</option>
+                  {Object.entries(labels).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
                 </select>
               </div>
-            ))
-          )}
+            </div>
+          ))}
         </div>
       )}
     </div>
   );
 
-  return createPortal(content, portalTarget);
+  if (!portalTarget) return null;
+  return createPortal(panel, portalTarget);
 }
