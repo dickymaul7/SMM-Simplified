@@ -19,6 +19,7 @@ type QuickBrief = {
   cta?: string;
   preferredFormat?: "auto" | "carousel" | "reels" | "single_post";
   extraContext?: string;
+  storyAngleCount: number;
 };
 
 type QueryPlan = { queries: string[] };
@@ -85,6 +86,7 @@ function formatLabel(format: QuickBrief["preferredFormat"]) {
 export async function POST(request: Request) {
   try {
     const body = (await request.json().catch(() => ({}))) as Partial<QuickBrief>;
+    const requestedCount = Math.min(10, Math.max(1, Number(body.storyAngleCount ?? 5) || 5));
     const input: QuickBrief = {
       brandId: String(body.brandId ?? "").trim() || undefined,
       brandName: String(body.brandName ?? "").trim(),
@@ -95,6 +97,7 @@ export async function POST(request: Request) {
       cta: String(body.cta ?? "").trim(),
       preferredFormat: body.preferredFormat ?? "auto",
       extraContext: String(body.extraContext ?? "").trim(),
+      storyAngleCount: requestedCount,
     };
 
     if ((!input.brandId && !input.brandName) || !input.topic || !input.audience || !input.objective) {
@@ -200,10 +203,11 @@ TUGAS:
 1. Bentuk hidden brand profile yang cukup untuk menulis konten berkualitas. Ini adalah editorial inference, bukan klaim fakta perusahaan.
 2. Turunkan campaign logic: desired perception, business problem, key message, funnel stage.
 3. Pilih 3-4 kasus nyata dengan tension + mechanism kuat. Setiap kasus idealnya punya >=2 source refs.
-4. Buat tepat 5 content angles yang case-led dan non-generic.
+4. Buat hingga ${input.storyAngleCount} content angles yang case-led dan non-generic. Targetkan tepat ${input.storyAngleCount} jika tersedia cukup angle yang benar-benar berbeda dan kuat. Jika tidak, berhenti pada jumlah yang lebih sedikit daripada membuat filler.
 
 ATURAN KUALITAS:
 - Jangan membuat ide dari topik saja. Wajib Case/Evidence → Tension → Mechanism → Insight → Brand POV.
+- Setiap angle harus berbeda secara substantif pada thesis, tension, mechanism, atau audience implication; jangan membuat variasi judul dari ide yang sama.
 - Judul harus spesifik dan curiosity-driving tanpa clickbait palsu.
 - Utamakan kasus yang membuat audience berpikir “kok bisa?”.
 - Jangan membuat angka, quote, motive, legal finding, atau hubungan sebab-akibat yang tidak didukung source.
@@ -295,7 +299,7 @@ ATURAN KUALITAS:
       product_or_program: input.topic,
       key_message: synthesis.campaign.key_message,
       cta: input.cta || null,
-      content_target: 5,
+      content_target: synthesisIdeas.length,
       status: "draft",
     }).select("id").single();
     if (campaignError || !campaign) throw new Error(campaignError?.message || "Gagal membuat campaign.");
@@ -342,7 +346,7 @@ ATURAN KUALITAS:
     }
 
     const bestId = caseIdByKey.get(best.item.key)!;
-    const ideaRows = synthesisIdeas.map((idea) => {
+    const ideaRows = synthesisIdeas.slice(0, input.storyAngleCount).map((idea) => {
       const referencedCase = caseIdByKey.get(idea.case_key) || bestId;
       const preferred = input.preferredFormat && input.preferredFormat !== "auto" ? input.preferredFormat : idea.recommended_format;
       return {
