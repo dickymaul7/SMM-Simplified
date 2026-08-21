@@ -105,7 +105,11 @@ export async function POST(request: Request) {
     const review = await reviewBrief({ knowledge, context, brief: improved });
     const newScore = reviewTotal(review);
 
-    if (newScore + 0.01 < oldScore) {
+    // Explicit human requests are authoritative: if the user asked for a change,
+    // apply the revised brief even when the automated score is slightly lower.
+    // The score is still stored so the team can see the quality impact and decide
+    // whether another improvement pass is needed.
+    if (!userNotes && newScore + 0.01 < oldScore) {
       return NextResponse.json({ ok: true, applied: false, oldScore, newScore, message: "Versi lama dipertahankan karena skor revisi lebih rendah." });
     }
 
@@ -148,7 +152,16 @@ export async function POST(request: Request) {
     const { error: reviewError } = await supabase.from("quality_reviews").insert(reviewRow(briefId, review, newScore));
     if (reviewError) throw new Error(reviewError.message);
 
-    return NextResponse.json({ ok: true, applied: true, oldScore, newScore, message: "Brief berhasil diperbaiki dan di-score ulang." });
+    return NextResponse.json({
+      ok: true,
+      applied: true,
+      oldScore,
+      newScore,
+      userRequestApplied: Boolean(userNotes),
+      message: userNotes
+        ? "Permintaan Anda diterapkan ke brief dan seluruh slide yang relevan, lalu brief di-score ulang."
+        : "Brief berhasil diperbaiki dan di-score ulang.",
+    });
   } catch (error) {
     console.error("StoryBrief improve error", error);
     return errorJson(error instanceof Error ? error.message : "Gagal memperbaiki brief.", 500);
