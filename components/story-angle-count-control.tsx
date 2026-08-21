@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 
 const STORAGE_KEY = "smm-simplified:story-angle-count:v1";
+const BUTTON_TEXT = "Cari Kasus & Buat";
 
 export default function StoryAngleCountControl() {
   const pathname = usePathname();
@@ -28,14 +29,16 @@ export default function StoryAngleCountControl() {
   }, [count]);
 
   useEffect(() => {
-    if (!pathname?.startsWith("/studio")) return;
+    if (pathname !== "/") return;
 
     const originalFetch = window.fetch.bind(window);
     const interceptedFetch: typeof window.fetch = async (input, init) => {
       const originalUrl = typeof input === "string" ? input : input instanceof Request ? input.url : String(input);
       if (!originalUrl.includes("/api/ai/angles")) return originalFetch(input, init);
 
-      const targetUrl = originalUrl.replace("/api/ai/angles", "/api/ai/angles-v2");
+      const targetUrl = originalUrl.includes("/api/ai/angles-v2")
+        ? originalUrl
+        : originalUrl.replace("/api/ai/angles", "/api/ai/angles-v2");
       const nextInit: RequestInit = { ...init };
       if (typeof nextInit.body === "string") {
         try {
@@ -45,31 +48,42 @@ export default function StoryAngleCountControl() {
         } catch {}
       }
 
-      if (typeof input === "string") {
-        return originalFetch(targetUrl, nextInit);
-      }
-
-      if (input instanceof Request) {
-        return originalFetch(new Request(targetUrl, input), nextInit);
-      }
-
+      if (typeof input === "string") return originalFetch(targetUrl, nextInit);
+      if (input instanceof Request) return originalFetch(new Request(targetUrl, input), nextInit);
       return originalFetch(targetUrl, nextInit);
     };
 
     window.fetch = interceptedFetch;
+
+    const updateGenerateButton = () => {
+      const button = Array.from(document.querySelectorAll("button")).find((item) => item.textContent?.includes(BUTTON_TEXT));
+      if (button) button.textContent = `Cari Kasus & Buat ${countRef.current} Story Angles →`;
+    };
+
+    updateGenerateButton();
+    const observer = new MutationObserver(updateGenerateButton);
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+
     return () => {
       window.fetch = originalFetch;
+      observer.disconnect();
     };
   }, [pathname]);
 
-  if (!pathname?.startsWith("/studio")) return null;
+  useEffect(() => {
+    if (pathname !== "/") return;
+    const button = Array.from(document.querySelectorAll("button")).find((item) => item.textContent?.includes(BUTTON_TEXT));
+    if (button) button.textContent = `Cari Kasus & Buat ${count} Story Angles →`;
+  }, [count, pathname]);
+
+  if (pathname !== "/") return null;
 
   return (
-    <div className="fixed bottom-5 right-5 z-50 w-[290px] rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-xl backdrop-blur">
-      <div className="flex items-center justify-between gap-3">
+    <div className="fixed bottom-5 right-5 z-[60] w-[310px] rounded-2xl border border-blue-200 bg-white p-4 shadow-2xl">
+      <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-blue-600">Story Angles</p>
-          <p className="mt-1 text-sm font-semibold text-slate-900">Jumlah yang ingin dibuat</p>
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-blue-600">Generate Story Angles</p>
+          <p className="mt-1 text-sm font-semibold text-slate-900">Berapa brief yang ingin dibuat?</p>
         </div>
         <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">{count}/10</span>
       </div>
@@ -80,11 +94,7 @@ export default function StoryAngleCountControl() {
             key={value}
             type="button"
             onClick={() => setCount(value)}
-            className={`rounded-lg border px-2 py-1.5 text-xs font-semibold transition ${
-              count === value
-                ? "border-blue-600 bg-blue-600 text-white"
-                : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:text-blue-600"
-            }`}
+            className={`rounded-lg border px-2 py-1.5 text-xs font-semibold transition ${count === value ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:text-blue-600"}`}
           >
             {value}
           </button>
@@ -92,7 +102,7 @@ export default function StoryAngleCountControl() {
       </div>
 
       <p className="mt-3 text-[11px] leading-4 text-slate-500">
-        Default 5. Maksimal 10. Jika angle tambahan tidak cukup kuat, AI boleh berhenti lebih awal daripada membuat filler.
+        Default 5. Maksimal 10. AI tidak dipaksa membuat filler jika angle tambahan tidak cukup kuat.
       </p>
     </div>
   );
