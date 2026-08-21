@@ -57,7 +57,9 @@ export default function StoryAngleCountControl() {
 
     const updateGenerateButton = () => {
       const button = Array.from(document.querySelectorAll("button")).find((item) => item.textContent?.includes(BUTTON_TEXT));
-      if (button) button.textContent = `Cari Kasus & Buat ${countRef.current} Story Angles →`;
+      if (!button) return;
+      const nextLabel = `Cari Kasus & Buat ${countRef.current} Story Angles →`;
+      if (button.textContent !== nextLabel) button.textContent = nextLabel;
     };
 
     updateGenerateButton();
@@ -73,7 +75,9 @@ export default function StoryAngleCountControl() {
   useEffect(() => {
     if (pathname !== "/") return;
     const button = Array.from(document.querySelectorAll("button")).find((item) => item.textContent?.includes(BUTTON_TEXT));
-    if (button) button.textContent = `Cari Kasus & Buat ${count} Story Angles →`;
+    if (!button) return;
+    const nextLabel = `Cari Kasus & Buat ${count} Story Angles →`;
+    if (button.textContent !== nextLabel) button.textContent = nextLabel;
   }, [count, pathname]);
 
   if (pathname !== "/") return null;
