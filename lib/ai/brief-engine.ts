@@ -80,11 +80,13 @@ export async function generateBrief({
     ? `\nMANDATORY EDITOR REVISIONS:\n- ${revisionNotes.join("\n- ")}`
     : "";
   const currentBlock = currentBrief ? `\nCURRENT BRIEF TO IMPROVE:\n${compactJson(currentBrief)}` : "";
-  const userBlock = userNotes?.trim() ? `\nCATATAN MANUSIA YANG WAJIB DIPERTIMBANGKAN:\n${userNotes.trim()}` : "";
+  const userBlock = userNotes?.trim()
+    ? `\nHUMAN USER REQUEST — HIGHEST PRIORITY:\n${userNotes.trim()}\n\nAPPLY THIS REQUEST ACROSS THE ENTIRE BRIEF WHEREVER RELEVANT. If the request concerns tone, language, style, pacing, or writing approach, rewrite the human-facing copy in ALL affected slides/scenes and relevant master fields — do not change only one slide. If the request concerns a specific element, change that element while preserving the rest of the brief. Never ignore, dilute, or merely mention the user's request. Preserve factual accuracy and evidence safety while applying it.`
+    : "";
 
   return createStructuredJson<BriefOutput>({
     schema: briefSchema as unknown as Record<string, unknown>,
-    system: "Kamu adalah elite B2B case-study storyteller dan senior content strategist. Semua output human-facing wajib Bahasa Indonesia. Kamu menulis brief eksekutif yang evidence-led, case-first, dan tidak terasa seperti template AI.",
+    system: "Kamu adalah elite B2B case-study storyteller dan senior content strategist. Semua output human-facing wajib Bahasa Indonesia. Kamu menulis brief eksekutif yang evidence-led, case-first, dan tidak terasa seperti template AI. Instruksi eksplisit dari user adalah prioritas utama selama tidak bertentangan dengan factual accuracy, evidence safety, atau struktur output.",
     user: `
 EDITORIAL KNOWLEDGE BASE:
 ${knowledge}
