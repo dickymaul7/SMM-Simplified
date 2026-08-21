@@ -32,9 +32,10 @@ export default function StoryAngleCountControl() {
 
     const originalFetch = window.fetch.bind(window);
     const interceptedFetch: typeof window.fetch = async (input, init) => {
-      const url = typeof input === "string" ? input : input instanceof Request ? input.url : String(input);
-      if (!url.includes("/api/ai/angles")) return originalFetch(input, init);
+      const originalUrl = typeof input === "string" ? input : input instanceof Request ? input.url : String(input);
+      if (!originalUrl.includes("/api/ai/angles")) return originalFetch(input, init);
 
+      const targetUrl = originalUrl.replace("/api/ai/angles", "/api/ai/angles-v2");
       const nextInit: RequestInit = { ...init };
       if (typeof nextInit.body === "string") {
         try {
@@ -43,7 +44,16 @@ export default function StoryAngleCountControl() {
           nextInit.body = JSON.stringify(body);
         } catch {}
       }
-      return originalFetch(input, nextInit);
+
+      if (typeof input === "string") {
+        return originalFetch(targetUrl, nextInit);
+      }
+
+      if (input instanceof Request) {
+        return originalFetch(new Request(targetUrl, input), nextInit);
+      }
+
+      return originalFetch(targetUrl, nextInit);
     };
 
     window.fetch = interceptedFetch;
