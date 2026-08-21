@@ -93,7 +93,7 @@ export async function POST(request: Request) {
     const context = { brand, guideline, campaign, idea, researchCase, sources };
     const format = (idea.recommended_format || "carousel") as "carousel" | "reels" | "single_post";
 
-    const improved = await generateBrief({
+    let improved = await generateBrief({
       knowledge,
       context,
       sourceList,
@@ -102,13 +102,32 @@ export async function POST(request: Request) {
       currentBrief,
       userNotes,
     });
-    const review = await reviewBrief({ knowledge, context, brief: improved });
+    let review = await reviewBrief({ knowledge, context, brief: improved, userNotes });
+
+    // A human request gets a dedicated second editorial pass. The first pass is
+    // intentionally reviewed before the second pass so the model receives
+    // concrete, section-level revisions instead of merely repeating the request.
+    if (userNotes) {
+      const secondPassNotes = [
+        ...review.required_revisions,
+        "MANDATORY: Apply the user's request across every affected slide/scene and relevant master field. Rewrite the copy substantively; do not make token-level edits.",
+      ];
+      improved = await generateBrief({
+        knowledge,
+        context,
+        sourceList,
+        format,
+        revisionNotes: secondPassNotes,
+        currentBrief: improved,
+        userNotes,
+      });
+      review = await reviewBrief({ knowledge, context, brief: improved, userNotes });
+    }
+
     const newScore = reviewTotal(review);
 
     // Explicit human requests are authoritative: if the user asked for a change,
     // apply the revised brief even when the automated score is slightly lower.
-    // The score is still stored so the team can see the quality impact and decide
-    // whether another improvement pass is needed.
     if (!userNotes && newScore + 0.01 < oldScore) {
       return NextResponse.json({ ok: true, applied: false, oldScore, newScore, message: "Versi lama dipertahankan karena skor revisi lebih rendah." });
     }
@@ -157,9 +176,10 @@ export async function POST(request: Request) {
       applied: true,
       oldScore,
       newScore,
+      improvementPasses: userNotes ? 2 : 1,
       userRequestApplied: Boolean(userNotes),
       message: userNotes
-        ? "Permintaan Anda diterapkan ke brief dan seluruh slide yang relevan, lalu brief di-score ulang."
+        ? "Permintaan Anda diterapkan melalui 2 editorial passes dan seluruh bagian yang relevan telah ditulis ulang."
         : "Brief berhasil diperbaiki dan di-score ulang.",
     });
   } catch (error) {
