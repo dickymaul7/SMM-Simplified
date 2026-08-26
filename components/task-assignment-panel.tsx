@@ -44,23 +44,34 @@ export default function TaskAssignmentPanel() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
+  // The calendar card is rendered asynchronously. Wait for the actual
+  // schedule button instead of giving up after a fixed number of retries.
+  // The observer disconnects as soon as the target is found, so it cannot
+  // create a render loop or freeze the page.
   useEffect(() => {
-    let attempts = 0;
-    let timer: number | null = null;
+    let disposed = false;
+    let frame = 0;
+    let observer: MutationObserver | null = null;
 
-    const refreshTarget = () => {
+    const resolveTarget = () => {
+      if (disposed) return;
       const target = findScheduleTarget();
       if (target) {
         setPortalTarget(target);
+        observer?.disconnect();
         return;
       }
-      attempts += 1;
-      if (attempts < 20) timer = window.setTimeout(refreshTarget, 150);
+      frame = window.requestAnimationFrame(resolveTarget);
     };
 
-    refreshTarget();
+    observer = new MutationObserver(resolveTarget);
+    observer.observe(document.body, { childList: true, subtree: true });
+    resolveTarget();
+
     return () => {
-      if (timer) window.clearTimeout(timer);
+      disposed = true;
+      window.cancelAnimationFrame(frame);
+      observer?.disconnect();
     };
   }, []);
 
