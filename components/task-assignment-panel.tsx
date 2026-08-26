@@ -24,19 +24,11 @@ const labels = {
   completed: "Completed",
 };
 
-function findQuickMoveTarget(): HTMLElement | null {
-  const heading = Array.from(document.querySelectorAll("h2")).find(
-    (node) => node.textContent?.trim() === "Quick Move",
+function findScheduleTarget(): HTMLElement | null {
+  const button = Array.from(document.querySelectorAll("button")).find(
+    (node) => node.textContent?.trim() === "Pindahkan Tanggal",
   );
-  return heading?.closest("div.rounded-3xl") ?? null;
-}
-
-function hideWorkflowCard() {
-  const heading = Array.from(document.querySelectorAll("h2")).find(
-    (node) => node.textContent?.trim() === "Workflow",
-  );
-  const card = heading?.closest("div.rounded-3xl") as HTMLElement | null;
-  if (card) card.style.display = "none";
+  return button?.parentElement ?? null;
 }
 
 export default function TaskAssignmentPanel() {
@@ -53,8 +45,10 @@ export default function TaskAssignmentPanel() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    setPortalTarget(findQuickMoveTarget());
-    hideWorkflowCard();
+    const refreshTarget = () => setPortalTarget(findScheduleTarget());
+    refreshTarget();
+    const timer = window.setTimeout(refreshTarget, 250);
+    return () => window.clearTimeout(timer);
   }, []);
 
   async function load() {
@@ -114,15 +108,12 @@ export default function TaskAssignmentPanel() {
   }, []);
 
   const isSuperadmin = member?.role === "superadmin";
-  const focusedTasks = useMemo(
-    () => {
-      const mine = tasks.filter((task) => task.assigned_to === member?.id);
-      if (filter === "active") return mine.filter((task) => task.status !== "completed");
-      if (filter) return mine.filter((task) => task.status === filter);
-      return [];
-    },
-    [filter, tasks, member?.id],
-  );
+  const focusedTasks = useMemo(() => {
+    const mine = tasks.filter((task) => task.assigned_to === member?.id);
+    if (filter === "active") return mine.filter((task) => task.status !== "completed");
+    if (filter) return mine.filter((task) => task.status === filter);
+    return [];
+  }, [filter, tasks, member?.id]);
 
   async function assignTask() {
     if (!briefId || !assignee) {
@@ -172,17 +163,15 @@ export default function TaskAssignmentPanel() {
   }
 
   const panel = (
-    <div className="mt-5 border-t border-slate-200 pt-5">
+    <div className="mt-4 border-t border-slate-200 pt-4">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-slate-900">Task Assignment</p>
           <p className="mt-1 text-xs text-slate-500">
-            {isSuperadmin ? "Assign content calendar ke member tim." : "Task yang diberikan kepada akun ini."}
+            {isSuperadmin ? "Assign brief ini langsung ke member tim." : "Task yang diberikan kepada akun ini."}
           </p>
         </div>
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-600">
-          {focusedTasks.length} task aktif
-        </span>
+        {filter && <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-600">{focusedTasks.length} task aktif</span>}
       </div>
 
       {isSuperadmin && (
