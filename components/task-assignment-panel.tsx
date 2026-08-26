@@ -181,8 +181,6 @@ export default function TaskAssignmentPanel() {
       return;
     }
 
-    // assigned_by references auth.users, so it must use the authenticated
-    // user's UUID, not the team_members.id UUID.
     const { data: existing, error: existingError } = await supabase
       .from("task_assignments")
       .select("id")
@@ -217,6 +215,7 @@ export default function TaskAssignmentPanel() {
     setError("");
     setAssignee("");
     await load();
+    window.dispatchEvent(new Event("task-assignment-updated"));
   }
 
   async function updateStatus(taskId: string, status: Task["status"]) {
