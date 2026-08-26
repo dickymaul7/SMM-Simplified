@@ -39,17 +39,50 @@ export default function TaskAssignmentPanel() {
   const [members, setMembers] = useState<Member[]>([]);
   const [briefs, setBriefs] = useState<Brief[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [briefId, setBriefId] = useState("");
+  const [activeBriefId, setActiveBriefId] = useState("");
   const [assignee, setAssignee] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const refreshTarget = () => setPortalTarget(findScheduleTarget());
+    let attempts = 0;
+    let timer: number | null = null;
+
+    const refreshTarget = () => {
+      const target = findScheduleTarget();
+      if (target) {
+        setPortalTarget(target);
+        return;
+      }
+      attempts += 1;
+      if (attempts < 20) timer = window.setTimeout(refreshTarget, 150);
+    };
+
     refreshTarget();
-    const timer = window.setTimeout(refreshTarget, 250);
-    return () => window.clearTimeout(timer);
+    return () => {
+      if (timer) window.clearTimeout(timer);
+    };
   }, []);
+
+  useEffect(() => {
+    const handleCalendarCardClick = (event: MouseEvent) => {
+      const article = (event.target as HTMLElement | null)?.closest("article");
+      if (!article) return;
+
+      const title = Array.from(article.querySelectorAll("p"))[0]?.textContent?.trim();
+      if (!title) return;
+
+      const matched = briefs.find((brief) => brief.title.trim() === title);
+      if (matched) {
+        setActiveBriefId(matched.id);
+        setMessage("");
+        setError("");
+      }
+    };
+
+    document.addEventListener("click", handleCalendarCardClick);
+    return () => document.removeEventListener("click", handleCalendarCardClick);
+  }, [briefs]);
 
   async function load() {
     const supabase = createClient();
@@ -108,6 +141,7 @@ export default function TaskAssignmentPanel() {
   }, []);
 
   const isSuperadmin = member?.role === "superadmin";
+  const activeBrief = briefs.find((brief) => brief.id === activeBriefId) ?? null;
   const focusedTasks = useMemo(() => {
     const mine = tasks.filter((task) => task.assigned_to === member?.id);
     if (filter === "active") return mine.filter((task) => task.status !== "completed");
@@ -116,16 +150,16 @@ export default function TaskAssignmentPanel() {
   }, [filter, tasks, member?.id]);
 
   async function assignTask() {
-    if (!briefId || !assignee) {
-      setError("Pilih content dan member terlebih dahulu.");
+    if (!activeBriefId || !assignee) {
+      setError("Klik brief di Content Calendar lalu pilih member terlebih dahulu.");
       return;
     }
 
-    const brief = briefs.find((item) => item.id === briefId);
+    const brief = briefs.find((item) => item.id === activeBriefId);
     const supabase = createClient();
     const { error: insertError } = await supabase.from("task_assignments").upsert(
       {
-        brief_id: briefId,
+        brief_id: activeBriefId,
         assigned_to: assignee,
         assigned_by: member?.id ?? null,
         status: "todo",
@@ -140,9 +174,8 @@ export default function TaskAssignmentPanel() {
       return;
     }
 
-    setMessage("Task berhasil di-assign.");
+    setMessage(`Task berhasil di-assign ke ${members.find((item) => item.id === assignee)?.display_name || "member"}.`);
     setError("");
-    setBriefId("");
     setAssignee("");
     await load();
   }
@@ -168,7 +201,7 @@ export default function TaskAssignmentPanel() {
         <div>
           <p className="text-sm font-semibold text-slate-900">Task Assignment</p>
           <p className="mt-1 text-xs text-slate-500">
-            {isSuperadmin ? "Assign brief ini langsung ke member tim." : "Task yang diberikan kepada akun ini."}
+            {isSuperadmin ? "Assign brief yang sedang kamu pilih langsung ke member tim." : "Task yang diberikan kepada akun ini."}
           </p>
         </div>
         {filter && <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-600">{focusedTasks.length} task aktif</span>}
@@ -176,23 +209,23 @@ export default function TaskAssignmentPanel() {
 
       {isSuperadmin && (
         <div className="mt-4 grid gap-3">
-          <select
-            value={briefId}
-            onChange={(event) => setBriefId(event.target.value)}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none"
-          >
-            <option value="">Pilih content calendar</option>
-            {briefs.map((brief) => (
-              <option key={brief.id} value={brief.id}>
-                {brief.title}
-              </option>
-            ))}
-          </select>
+          <div className={`rounded-xl border px-3 py-2.5 ${activeBrief ? "border-blue-200 bg-blue-50" : "border-dashed border-slate-300 bg-slate-50"}`}>
+            {activeBrief ? (
+              <>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">Brief terpilih</p>
+                <p className="mt-1 text-sm font-semibold leading-5 text-slate-800">{activeBrief.title}</p>
+                <p className="mt-1 text-[11px] text-slate-500">Due: {activeBrief.scheduled_for || "Belum dijadwalkan"}</p>
+              </>
+            ) : (
+              <p className="text-xs leading-5 text-slate-500">Klik salah satu card brief di calendar terlebih dahulu. Brief yang diklik akan otomatis dipilih di sini.</p>
+            )}
+          </div>
 
           <select
             value={assignee}
             onChange={(event) => setAssignee(event.target.value)}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none"
+            disabled={!activeBrief}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none disabled:cursor-not-allowed disabled:bg-slate-50"
           >
             <option value="">Assign ke member</option>
             {members
@@ -207,7 +240,8 @@ export default function TaskAssignmentPanel() {
           <button
             type="button"
             onClick={assignTask}
-            className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+            disabled={!activeBrief || !assignee}
+            className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Assign Task
           </button>
