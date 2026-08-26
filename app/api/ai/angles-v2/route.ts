@@ -86,6 +86,17 @@ function formatLabel(format: QuickBrief["preferredFormat"]) {
   return "Pilih format terbaik per angle berdasarkan kekuatan cerita.";
 }
 
+function fallbackQueries(input: QuickBrief) {
+  const context = input.extraContext?.trim();
+  const base = [input.topic, context].filter(Boolean).join(" ");
+  return [
+    `${base} case study perusahaan nyata keputusan dampak`,
+    `${base} ${input.audience} Indonesia perusahaan perubahan terbaru`,
+    `${base} ${input.objective} business case organization strategy`,
+    `${base} company workforce business transformation evidence`,
+  ].map((query) => query.replace(/\s+/g, " ").trim().slice(0, 420));
+}
+
 export async function POST(request: Request) {
   try {
     const body = (await request.json().catch(() => ({}))) as Partial<QuickBrief>;
@@ -140,42 +151,59 @@ export async function POST(request: Request) {
 
     const knowledge = await loadStorytellingKnowledge();
     const today = new Date().toISOString().slice(0, 10);
-    const queryPlan = await createStructuredJson<QueryPlan>({
-      schema: queryPlanSchema as unknown as Record<string, unknown>,
-      system: "Kamu adalah search strategist untuk riset case study B2B. Tugasmu hanya membuat query pencarian yang presisi.",
-      user: `TANGGAL: ${today}\n\nQUICK CAMPAIGN BRIEF:\n${compactJson(input)}\n\nEXISTING BRAND CONTEXT:\n${compactJson(existingGuideline ? { positioning: existingBrand?.positioning, target_audiences: existingGuideline.target_audiences, audience_pain_points: existingGuideline.audience_pain_points, core_expertise: existingGuideline.core_expertise, brand_pov: existingGuideline.brand_pov } : null)}\n\nBuat tepat 4 query web untuk menemukan kasus perusahaan/organisasi nyata yang relevan dengan topik dan business problem campaign. Query harus mencari nama perusahaan, kejadian konkret, konsekuensi, keputusan, dan mechanism. Jangan tulis copy sosial media.`,
-      temperature: 0.2,
-    });
 
-    const queries = (queryPlan?.queries ?? []).filter((q): q is string => typeof q === "string").map((q) => q.trim()).filter(Boolean);
-    if (queries.length !== 4) return errorJson("Format respons AI tidak lengkap. Silakan generate ulang.", 502);
+    let queries: string[] = [];
+    try {
+      const queryPlan = await createStructuredJson<QueryPlan>({
+        schema: queryPlanSchema as unknown as Record<string, unknown>,
+        system: "Kamu adalah search strategist untuk riset case study B2B. Tugasmu hanya membuat query pencarian yang presisi.",
+        user: `TANGGAL: ${today}\n\nQUICK CAMPAIGN BRIEF:\n${compactJson(input)}\n\nEXISTING BRAND CONTEXT:\n${compactJson(existingGuideline ? { positioning: existingBrand?.positioning, target_audiences: existingGuideline.target_audiences, audience_pain_points: existingGuideline.audience_pain_points, core_expertise: existingGuideline.core_expertise, brand_pov: existingGuideline.brand_pov } : null)}\n\nBuat tepat 4 query web untuk menemukan kasus perusahaan/organisasi nyata yang relevan dengan topik, konteks tambahan, audience, dan business problem campaign. Jika konteks menyebut domain seperti human capital, HR, AI, ESG, quality, atau lainnya, perluas secara semantik ke istilah industri yang setara. Query harus mencari kejadian konkret, keputusan, mechanism, dan konsekuensi. Jangan tulis copy sosial media.`,
+        temperature: 0.2,
+      });
+      queries = (queryPlan?.queries ?? []).filter((q): q is string => typeof q === "string").map((q) => q.trim()).filter(Boolean);
+    } catch (error) {
+      console.warn("Query planning failed; using deterministic fallback queries", error);
+    }
+    queries = Array.from(new Set([...queries, ...fallbackQueries(input)])).slice(0, 4);
 
-    const [globalBatches, indonesiaBatches] = await Promise.all([
-      Promise.all(queries.map(async (query) => ({ query, results: await tavilySearch(query) }))),
-      Promise.all(buildIndonesiaNewsQueries(input).map(async (query) => ({ query, results: await tavilyNewsSearch(query) }))),
-    ]);
+    const globalBatches = await Promise.all(queries.map(async (query) => {
+      try {
+        return { query, results: await tavilySearch(query) };
+      } catch (error) {
+        console.warn("Global research query failed", query, error);
+        return { query, results: [] };
+      }
+    }));
+    const indonesiaBatches = await Promise.all(buildIndonesiaNewsQueries(input).map(async (query) => {
+      try {
+        return { query, results: await tavilyNewsSearch(query) };
+      } catch (error) {
+        console.warn("Indonesia news query failed", query, error);
+        return { query, results: [] };
+      }
+    }));
 
     const webSources = normalizeSources(globalBatches);
     const indonesiaNews = normalizeIndonesiaNews(indonesiaBatches);
-    if (webSources.length < 5 && indonesiaNews.length < 5) {
-      return errorJson("Source live research terlalu sedikit. Coba perjelas topik atau objective.", 502);
+    const totalSources = webSources.length + indonesiaNews.length;
+    if (totalSources === 0) {
+      return errorJson("Belum ada evidence live yang bisa diverifikasi. Coba tambahkan konteks yang lebih spesifik atau coba generate lagi beberapa saat kemudian.", 502);
     }
 
-    const globalCatalog = webSources.map((s) => `${s.ref} | GLOBAL | ${s.publisher} | ${s.title} | ${s.url}\nSNIPPET: ${s.content}`).join("\n\n");
+    const globalCatalog = webSources.map((s) => `${s.ref} | GLOBAL/INDUSTRY | ${s.publisher} | ${s.title} | ${s.url}\nSNIPPET: ${s.content}`).join("\n\n");
     const indonesiaCatalog = indonesiaNews.map((s) => `${s.ref} | INDONESIA NEWS | ${s.publisher} | ${s.title} | ${s.url}\nSNIPPET: ${s.content}`).join("\n\n");
-    const sourceCatalog = [globalCatalog, indonesiaCatalog].filter(Boolean).join("\n\n=== END SOURCE GROUP ===\n\n");
 
     const synthesis = await createStructuredJson<Synthesis>({
       schema: angleSynthesisSchema as unknown as Record<string, unknown>,
       system: "Kamu adalah gabungan senior B2B researcher, content strategist, dan executive storyteller. Semua output human-facing wajib Bahasa Indonesia. Kamu menolak konten generik. Berita Indonesia adalah sinyal tren dan bahan case/evidence, bukan alasan untuk mengejar viralitas secara buta.",
-      user: `EDITORIAL KNOWLEDGE BASE:\n${knowledge}\n\nQUICK INPUT:\n${compactJson(input)}\n\nEXISTING BRAND INTELLIGENCE:\n${compactJson(existingGuideline ? { brand: existingBrand, guideline: existingGuideline } : null)}\n\nGLOBAL/INDUSTRY WEB SOURCES:\n${globalCatalog || "Tidak ada sumber global yang cukup."}\n\nINDONESIAN NEWS — BERITA TERBARU MAKSIMAL 7 HARI:\n${indonesiaCatalog || "Tidak ada berita Indonesia yang relevan ditemukan."}\n\nATURAN NEWS INTELLIGENCE:\n- Prioritaskan berita Indonesia yang aktual dan relevan dengan topic, audience, objective, atau business problem.\n- Gunakan berita Indonesia sebagai signal/trend atau case evidence; jangan menganggap headline otomatis penting hanya karena sedang ramai.\n- Jangan membuat klaim bahwa suatu berita "viral", "paling ramai", atau "sedang trending" kecuali sumber benar-benar mendukungnya.\n- Jika berita Indonesia hanya relevan secara permukaan, abaikan. Relevansi strategis lebih penting daripada recency.\n- Untuk fakta yang berasal dari berita, pertahankan source ref dan jangan mengarang detail yang tidak ada di snippet.\n- Global/official/industry sources tetap boleh menjadi sumber utama; Indonesia news menambah konteks lokal dan recency.\n\nTUGAS:\n1. Bentuk hidden brand profile yang cukup untuk menulis konten berkualitas.\n2. Turunkan campaign logic: desired perception, business problem, key message, funnel stage.\n3. Pilih 3-4 kasus nyata dengan tension + mechanism kuat. Setiap kasus idealnya punya >=2 source refs.\n4. Jika ada berita Indonesia yang punya relevance + storytelling potential tinggi, prioritaskan atau gunakan sebagai konteks lokal untuk case.\n5. Buat HINGGA ${storyAngleCount} content angles yang case-led dan non-generic. Usahakan mencapai jumlah yang diminta hanya jika setiap angle benar-benar berbeda dan kuat. Jika kualitas turun, berhenti lebih awal; jangan membuat filler.\n\nATURAN KUALITAS:\n- Setiap angle wajib mengikuti Case/Evidence → Tension → Mechanism → Insight → Brand POV.\n- Jangan membuat angle hanya dengan mengganti headline dari angle lain.\n- Setiap angle harus memiliki thesis, tension, mechanism, dan audience implication yang berbeda.\n- Judul harus spesifik dan curiosity-driving tanpa clickbait palsu.\n- Jangan membuat angka, quote, motive, legal finding, motive, atau hubungan sebab-akibat yang tidak didukung source.\n- Semua human-facing text dalam Bahasa Indonesia; nama perusahaan, produk, istilah resmi, dan judul sumber boleh tetap asli.\n- Audience adalah ${input.audience}. Beri implikasi yang relevan dengan senioritas/profesi mereka.\n- ${formatLabel(input.preferredFormat)}\n- Extra context user: ${input.extraContext || "Tidak ada."}\n- Brand promotion tidak boleh muncul terlalu cepat; insight harus earned.`,
+      user: `EDITORIAL KNOWLEDGE BASE:\n${knowledge}\n\nQUICK INPUT:\n${compactJson(input)}\n\nEXISTING BRAND INTELLIGENCE:\n${compactJson(existingGuideline ? { brand: existingBrand, guideline: existingGuideline } : null)}\n\nGLOBAL/INDUSTRY WEB SOURCES:\n${globalCatalog || "Tidak ada sumber global yang cukup."}\n\nINDONESIAN NEWS — BERITA TERBARU MAKSIMAL 7 HARI:\n${indonesiaCatalog || "Tidak ada berita Indonesia yang relevan ditemukan."}\n\nATURAN EVIDENCE:\n- Minimal satu kasus nyata dengan minimal satu source yang terverifikasi sudah cukup untuk melanjutkan generator. Jangan menghentikan proses hanya karena belum ada dua kasus atau dua source.\n- Jika hanya ada satu kasus kuat, gunakan kasus tersebut sebagai basis dan buat beberapa angle berbeda dari tension/mechanism/implication yang berbeda. Jangan mengarang kasus kedua.\n- Jika ada beberapa kasus, pilih yang paling kuat; kualitas evidence lebih penting daripada jumlah.\n- Jangan membuat angka, quote, motive, legal finding, hasil, atau hubungan sebab-akibat yang tidak didukung source.\n- Jangan pernah membuat perusahaan atau kasus fiktif untuk memenuhi jumlah.\n- Tandai evidence yang hanya didukung satu source sebagai confidence yang sesuai; jangan menyebutnya "terverifikasi penuh".\n\nATURAN NEWS INTELLIGENCE:\n- Prioritaskan berita Indonesia yang aktual dan relevan dengan topic, audience, objective, extra context, atau business problem.\n- Gunakan berita Indonesia sebagai signal/trend atau case evidence; jangan menganggap headline penting hanya karena baru.\n- Jika berita Indonesia hanya relevan secara permukaan, abaikan. Relevansi strategis lebih penting daripada recency.\n- Global/official/industry sources tetap boleh menjadi sumber utama; berita Indonesia menambah konteks lokal dan recency.\n\nTUGAS:\n1. Bentuk hidden brand profile yang cukup untuk menulis konten berkualitas.\n2. Turunkan campaign logic: desired perception, business problem, key message, funnel stage.\n3. Pilih 3-4 kasus nyata jika tersedia. Setiap kasus wajib memiliki minimal satu source ref yang benar-benar ada di katalog. Tidak perlu memaksa 2 source per kasus.\n4. Jika hanya satu kasus yang cukup kuat, tetap masukkan kasus itu dan gunakan sebagai evidence utama.\n5. Buat HINGGA ${storyAngleCount} content angles yang case-led dan non-generic. Usahakan mencapai jumlah yang diminta hanya jika setiap angle benar-benar berbeda dan kuat. Jika kualitas turun, berhenti lebih awal; jangan membuat filler.\n\nATURAN KUALITAS:\n- Setiap angle wajib mengikuti Case/Evidence → Tension → Mechanism → Insight → Brand POV.\n- Jangan membuat angle hanya dengan mengganti headline dari angle lain.\n- Setiap angle harus memiliki thesis, tension, mechanism, dan audience implication yang berbeda.\n- Judul harus spesifik dan curiosity-driving tanpa clickbait palsu.\n- Semua human-facing text dalam Bahasa Indonesia; nama perusahaan, produk, istilah resmi, dan judul sumber boleh tetap asli.\n- Audience adalah ${input.audience}. Beri implikasi yang relevan dengan senioritas/profesi mereka.\n- ${formatLabel(input.preferredFormat)}\n- Extra context user: ${input.extraContext || "Tidak ada."}\n- Brand promotion tidak boleh muncul terlalu cepat; insight harus earned.`,
       temperature: 0.35,
     });
 
     const synthesisCases = Array.isArray(synthesis?.cases) ? synthesis.cases : [];
     const synthesisIdeas = Array.isArray(synthesis?.ideas) ? synthesis.ideas.slice(0, storyAngleCount) : [];
     if (!synthesis?.brand_profile || !synthesis?.campaign || !synthesisCases.length || !synthesisIdeas.length) {
-      return errorJson("Format respons AI tidak lengkap. Silakan generate ulang.", 502);
+      return errorJson("AI belum menghasilkan struktur brief yang lengkap. Silakan generate ulang.", 502);
     }
     if (synthesisIdeas.length > storyAngleCount) return errorJson("AI mengembalikan jumlah story angle melebihi permintaan.", 502);
 
@@ -186,8 +214,15 @@ export async function POST(request: Request) {
       const avg = average([clampScore(item.relevance_score), clampScore(item.credibility_score), clampScore(item.tension_score), clampScore(item.executive_value_score), clampScore(item.brand_fit_score)]);
       return { item, mappedSources, avg };
     });
-    const eligible = normalizedCases.filter((c) => c.mappedSources.length >= 2 && c.item.confidence !== "low");
-    if (eligible.length < 2) return errorJson("AI belum menemukan minimal dua kasus yang cukup terverifikasi. Coba perjelas topik campaign.", 502);
+
+    // One strong evidence-backed case is enough. If no medium/high-confidence case exists,
+    // use the best source-backed candidate rather than blocking the whole generator.
+    const strongCases = normalizedCases.filter((c) => c.mappedSources.length >= 1 && c.item.confidence !== "low");
+    const sourceBackedCases = normalizedCases.filter((c) => c.mappedSources.length >= 1);
+    const eligible = strongCases.length ? strongCases : sourceBackedCases;
+    if (!eligible.length) {
+      return errorJson("AI belum dapat menghubungkan kasus dengan source yang tersedia. Coba generate ulang agar riset mendapatkan evidence lain.", 502);
+    }
     const best = [...eligible].sort((a, b) => b.avg - a.avg)[0];
 
     let brandId = existingBrand?.id as string | undefined;
@@ -244,18 +279,46 @@ export async function POST(request: Request) {
 
     const caseIdByKey = new Map<string, string>();
     for (const c of normalizedCases) {
-      const verified = c.mappedSources.length >= 2 && c.item.confidence !== "low";
-      const { data: inserted, error } = await supabase.from("research_cases").insert({ campaign_id: campaign.id, company_name: c.item.company_name || null, case_title: c.item.case_title, case_summary: c.item.case_summary, business_problem: c.item.business_problem, tension: c.item.tension, decision_or_move: c.item.decision_or_move, mechanism: c.item.mechanism, outcome: c.item.outcome, executive_implication: c.item.executive_implication, relevance_score: clampScore(c.item.relevance_score), credibility_score: clampScore(c.item.credibility_score), tension_score: clampScore(c.item.tension_score), executive_value_score: clampScore(c.item.executive_value_score), brand_fit_score: clampScore(c.item.brand_fit_score), confidence: c.item.confidence, selected: c === best, research_status: verified ? "verified" : "candidate" }).select("id").single();
+      const verified = c.mappedSources.length >= 1 && c.item.confidence !== "low";
+      const { data: inserted, error } = await supabase.from("research_cases").insert({
+        campaign_id: campaign.id,
+        company_name: c.item.company_name || null,
+        case_title: c.item.case_title,
+        case_summary: c.item.case_summary,
+        business_problem: c.item.business_problem,
+        tension: c.item.tension,
+        decision_or_move: c.item.decision_or_move,
+        mechanism: c.item.mechanism,
+        outcome: c.item.outcome,
+        executive_implication: c.item.executive_implication,
+        relevance_score: clampScore(c.item.relevance_score),
+        credibility_score: clampScore(c.item.credibility_score),
+        tension_score: clampScore(c.item.tension_score),
+        executive_value_score: clampScore(c.item.executive_value_score),
+        brand_fit_score: clampScore(c.item.brand_fit_score),
+        confidence: c.item.confidence,
+        selected: c === best,
+        research_status: verified ? "verified" : "candidate",
+      }).select("id").single();
       if (error || !inserted) throw new Error(error?.message || "Gagal menyimpan research case.");
       caseIdByKey.set(c.item.key, inserted.id);
       if (c.mappedSources.length) {
-        const rows = c.mappedSources.map((mapped, index) => ({ research_case_id: inserted.id, source_type: mapped.source_type, publisher: mapped.source!.publisher, title: mapped.source!.title, url: mapped.source!.url, source_rank: index + 1, fact_notes: mapped.fact_notes }));
+        const rows = c.mappedSources.map((mapped, index) => ({
+          research_case_id: inserted.id,
+          source_type: mapped.source_type,
+          publisher: mapped.source!.publisher,
+          title: mapped.source!.title,
+          url: mapped.source!.url,
+          source_rank: index + 1,
+          fact_notes: mapped.fact_notes,
+        }));
         const { error: sourceError } = await supabase.from("research_sources").insert(rows);
         if (sourceError) throw new Error(sourceError.message);
       }
     }
 
-    const bestId = caseIdByKey.get(best.item.key)!;
+    const bestId = caseIdByKey.get(best.item.key);
+    if (!bestId) throw new Error("Research case utama gagal dipetakan.");
     const ideaRows = synthesisIdeas.map((idea) => {
       const referencedCase = caseIdByKey.get(idea.case_key) || bestId;
       const preferred = input.preferredFormat && input.preferredFormat !== "auto" ? input.preferredFormat : idea.recommended_format;
@@ -264,7 +327,7 @@ export async function POST(request: Request) {
     const { error: ideaError } = await supabase.from("content_ideas").insert(ideaRows);
     if (ideaError) throw new Error(ideaError.message);
 
-    return NextResponse.json({ ok: true, campaignId: campaign.id, ideasCreated: ideaRows.length, requestedStoryAngles: storyAngleCount, verifiedCases: eligible.length, indonesiaNewsSources: indonesiaNews.length });
+    return NextResponse.json({ ok: true, campaignId: campaign.id, ideasCreated: ideaRows.length, requestedStoryAngles: storyAngleCount, verifiedCases: strongCases.length, evidenceCases: eligible.length, indonesiaNewsSources: indonesiaNews.length, evidenceMode: strongCases.length ? "strong" : "limited" });
   } catch (error) {
     console.error("StoryBrief angles-v2 error", error);
     return errorJson(error instanceof Error ? error.message : "Gagal menghasilkan storytelling angles.", 500);
