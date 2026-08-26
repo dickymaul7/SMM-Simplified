@@ -15,6 +15,7 @@ type Task = {
   priority: string;
   due_date: string | null;
 };
+type TaskFilter = Task["status"] | "active" | null;
 
 const labels = {
   todo: "To-do",
@@ -40,7 +41,7 @@ function hideWorkflowCard() {
 
 export default function TaskAssignmentPanel() {
   const params = useSearchParams();
-  const filter = params.get("task") as Task["status"] | null;
+  const filter = params.get("task") as TaskFilter;
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const [member, setMember] = useState<Member | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
@@ -114,10 +115,12 @@ export default function TaskAssignmentPanel() {
 
   const isSuperadmin = member?.role === "superadmin";
   const focusedTasks = useMemo(
-    () =>
-      filter
-        ? tasks.filter((task) => task.status === filter && task.assigned_to === member?.id)
-        : [],
+    () => {
+      const mine = tasks.filter((task) => task.assigned_to === member?.id);
+      if (filter === "active") return mine.filter((task) => task.status !== "completed");
+      if (filter) return mine.filter((task) => task.status === filter);
+      return [];
+    },
     [filter, tasks, member?.id],
   );
 
