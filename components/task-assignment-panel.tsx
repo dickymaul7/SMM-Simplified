@@ -28,7 +28,15 @@ function findScheduleTarget(): HTMLElement | null {
   const button = Array.from(document.querySelectorAll("button")).find(
     (node) => node.textContent?.trim() === "Pindahkan Tanggal",
   );
-  return button?.parentElement ?? null;
+  if (!button) return null;
+
+  const existing = button.parentElement?.querySelector<HTMLElement>("[data-task-assignment-root]");
+  if (existing) return existing;
+
+  const root = document.createElement("div");
+  root.setAttribute("data-task-assignment-root", "true");
+  button.insertAdjacentElement("afterend", root);
+  return root;
 }
 
 export default function TaskAssignmentPanel() {
@@ -44,10 +52,6 @@ export default function TaskAssignmentPanel() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  // The calendar card is rendered asynchronously. Wait for the actual
-  // schedule button instead of giving up after a fixed number of retries.
-  // The observer disconnects as soon as the target is found, so it cannot
-  // create a render loop or freeze the page.
   useEffect(() => {
     let disposed = false;
     let frame = 0;
@@ -208,7 +212,7 @@ export default function TaskAssignmentPanel() {
   }
 
   const panel = (
-    <div className="mt-4 border-t border-slate-200 pt-4">
+    <div className="border-t border-slate-200 pt-4">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-slate-900">Task Assignment</p>
