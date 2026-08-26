@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import AppHeader from "@/components/app-header";
 import AuthGuard from "@/components/auth-guard";
 import OverviewClient from "@/components/pages/overview-client";
+import TaskForcePanel from "@/components/task-force-panel";
 import { createClient } from "@/lib/supabase/client";
 
 function normalizeRole(role: string | null | undefined) {
@@ -76,6 +77,7 @@ export default function RoleAwareOverview() {
               Overview ini hanya menampilkan tugas yang di-assign kepada akun kamu. Seluruh project dan production overview hanya tersedia untuk Superadmin.
             </p>
           </header>
+          <TaskForcePanel />
         </div>
       </main>
     </AuthGuard>
