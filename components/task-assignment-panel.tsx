@@ -173,10 +173,16 @@ export default function TaskAssignmentPanel() {
 
     const brief = briefs.find((item) => item.id === activeBriefId);
     const supabase = createClient();
+    const { data: session } = await supabase.auth.getSession();
+    const authUserId = session.session?.user.id;
 
-    // Do not use upsert/onConflict here: the database currently does not
-    // guarantee a unique constraint on (brief_id, assigned_to). Check first,
-    // then update an existing assignment or insert a new one.
+    if (!authUserId) {
+      setError("Sesi login tidak ditemukan. Silakan login kembali.");
+      return;
+    }
+
+    // assigned_by references auth.users, so it must use the authenticated
+    // user's UUID, not the team_members.id UUID.
     const { data: existing, error: existingError } = await supabase
       .from("task_assignments")
       .select("id")
@@ -192,7 +198,7 @@ export default function TaskAssignmentPanel() {
     const payload = {
       brief_id: activeBriefId,
       assigned_to: assignee,
-      assigned_by: member?.id ?? null,
+      assigned_by: authUserId,
       status: "todo" as const,
       priority: "normal",
       due_date: brief?.scheduled_for ?? null,
