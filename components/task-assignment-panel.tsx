@@ -151,7 +151,8 @@ export default function TaskAssignmentPanel() {
     void load();
   }, []);
 
-  const isSuperadmin = member?.role === "superadmin";
+  const normalizedRole = member?.role?.toLowerCase().replace(/[\s_-]/g, "");
+  const isSuperadmin = normalizedRole === "superadmin";
   const activeBrief = briefs.find((brief) => brief.id === activeBriefId) ?? null;
   const focusedTasks = useMemo(() => {
     const mine = tasks.filter((task) => task.assigned_to === member?.id);
@@ -240,7 +241,7 @@ export default function TaskAssignmentPanel() {
           >
             <option value="">Assign ke member</option>
             {members
-              .filter((item) => item.role !== "superadmin")
+              .filter((item) => item.role.toLowerCase().replace(/[\s_-]/g, "") !== "superadmin")
               .map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.display_name} · {item.role}
