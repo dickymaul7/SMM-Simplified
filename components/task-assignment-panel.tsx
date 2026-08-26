@@ -173,24 +173,41 @@ export default function TaskAssignmentPanel() {
 
     const brief = briefs.find((item) => item.id === activeBriefId);
     const supabase = createClient();
-    const { error: insertError } = await supabase.from("task_assignments").upsert(
-      {
-        brief_id: activeBriefId,
-        assigned_to: assignee,
-        assigned_by: member?.id ?? null,
-        status: "todo",
-        priority: "normal",
-        due_date: brief?.scheduled_for ?? null,
-      },
-      { onConflict: "brief_id,assigned_to" },
-    );
 
-    if (insertError) {
-      setError(insertError.message);
+    // Do not use upsert/onConflict here: the database currently does not
+    // guarantee a unique constraint on (brief_id, assigned_to). Check first,
+    // then update an existing assignment or insert a new one.
+    const { data: existing, error: existingError } = await supabase
+      .from("task_assignments")
+      .select("id")
+      .eq("brief_id", activeBriefId)
+      .eq("assigned_to", assignee)
+      .maybeSingle();
+
+    if (existingError) {
+      setError(existingError.message);
       return;
     }
 
-    setMessage(`Task berhasil di-assign ke ${members.find((item) => item.id === assignee)?.display_name || "member"}.`);
+    const payload = {
+      brief_id: activeBriefId,
+      assigned_to: assignee,
+      assigned_by: member?.id ?? null,
+      status: "todo" as const,
+      priority: "normal",
+      due_date: brief?.scheduled_for ?? null,
+    };
+
+    const result = existing
+      ? await supabase.from("task_assignments").update(payload).eq("id", existing.id)
+      : await supabase.from("task_assignments").insert(payload);
+
+    if (result.error) {
+      setError(result.error.message);
+      return;
+    }
+
+    setMessage(`${existing ? "Assignment diperbarui" : "Task berhasil di-assign"} ke ${members.find((item) => item.id === assignee)?.display_name || "member"}.`);
     setError("");
     setAssignee("");
     await load();
