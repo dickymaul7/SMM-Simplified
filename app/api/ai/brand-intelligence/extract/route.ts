@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import pdfParse from "pdf-parse";
 
 import { getAIModel } from "@/lib/ai/core";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -8,11 +9,10 @@ export const dynamic = "force-dynamic";
 
 const MAX_FILES = 5;
 const MAX_TOTAL_BYTES = 12 * 1024 * 1024;
+const MAX_TEXT_PER_FILE = 180000;
 const TEXT_EXTENSIONS = new Set(["txt", "md", "csv", "json", "html", "htm", "xml"]);
 
-type GeminiPart =
-  | { text: string }
-  | { inlineData: { mimeType: string; data: string } };
+type SourceText = { name: string; text: string };
 
 function errorJson(message: string, status = 400) {
   return NextResponse.json({ ok: false, error: message }, { status });
@@ -44,14 +44,9 @@ function extractJson(text: string) {
   throw new Error("AI tidak mengembalikan JSON Brand Intelligence yang valid.");
 }
 
-function extractText(payload: any) {
-  const parts = payload?.candidates?.[0]?.content?.parts;
-  if (!Array.isArray(parts)) return "";
-  return parts
-    .filter((part: any) => typeof part?.text === "string")
-    .map((part: any) => part.text)
-    .join("")
-    .trim();
+function extractChatCompletionText(payload: any) {
+  const content = payload?.choices?.[0]?.message?.content;
+  return typeof content === "string" ? content.trim() : "";
 }
 
 function normalizeArray(value: unknown) {
@@ -75,14 +70,37 @@ function normalizeSources(value: unknown, fallbackNames: string[]) {
   return rows.length ? rows.slice(0, 10) : fallbackNames.map((name) => ({ name, notes: "Dibaca sebagai sumber Brand Intelligence." }));
 }
 
+async function extractSourceText(file: File) {
+  const ext = extension(file.name);
+
+  if (file.type === "application/pdf" || ext === "pdf") {
+    const bytes = Buffer.from(await file.arrayBuffer());
+    const parsed = await pdfParse(bytes);
+    const text = String(parsed.text || "").trim();
+    if (!text) {
+      throw new Error(`PDF ${file.name} tidak memiliki text layer yang dapat dibaca. Gunakan PDF hasil export yang memiliki teks selectable.`);
+    }
+    return text.slice(0, MAX_TEXT_PER_FILE);
+  }
+
+  if (file.type.startsWith("text/") || file.type === "application/json" || TEXT_EXTENSIONS.has(ext)) {
+    const text = await file.text();
+    return text.slice(0, MAX_TEXT_PER_FILE);
+  }
+
+  throw new Error(
+    `Format ${file.name} belum didukung langsung. Gunakan PDF atau file teks/CSV/JSON. Untuk DOCX, PPTX, atau XLSX, export ke PDF terlebih dahulu.`,
+  );
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createServerSupabaseClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return errorJson("Session login tidak valid. Silakan sign in ulang.", 401);
 
-    const apiKey = process.env.GEMINI_API_KEY?.trim();
-    if (!apiKey) return errorJson("GEMINI_API_KEY belum dikonfigurasi.", 503);
+    const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
+    if (!apiKey) return errorJson("DEEPSEEK_API_KEY belum dikonfigurasi.", 503);
 
     const formData = await request.formData();
     const files = formData
@@ -96,34 +114,10 @@ export async function POST(request: Request) {
     const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
     if (totalBytes > MAX_TOTAL_BYTES) return errorJson("Total file terlalu besar. Maksimal 12 MB per ekstraksi agar stabil di Vercel.");
 
-    const fileParts: GeminiPart[] = [];
-    const sourceNames: string[] = [];
-
+    const sources: SourceText[] = [];
     for (const file of files) {
-      const ext = extension(file.name);
-      sourceNames.push(file.name);
-
-      if (file.type === "application/pdf" || ext === "pdf") {
-        const bytes = Buffer.from(await file.arrayBuffer());
-        fileParts.push({
-          inlineData: {
-            mimeType: "application/pdf",
-            data: bytes.toString("base64"),
-          },
-        });
-        fileParts.push({ text: `SOURCE FILE: ${file.name}` });
-        continue;
-      }
-
-      if (file.type.startsWith("text/") || file.type === "application/json" || TEXT_EXTENSIONS.has(ext)) {
-        const text = await file.text();
-        fileParts.push({ text: `\n=== SOURCE FILE: ${file.name} ===\n${text.slice(0, 180000)}\n=== END SOURCE ===\n` });
-        continue;
-      }
-
-      return errorJson(
-        `Format ${file.name} belum didukung langsung. Gunakan PDF atau file teks/CSV/JSON. Untuk DOCX, PPTX, atau XLSX, export ke PDF terlebih dahulu.`,
-      );
+      const text = await extractSourceText(file);
+      sources.push({ name: file.name, text });
     }
 
     const contract = {
@@ -147,11 +141,15 @@ export async function POST(request: Request) {
       confidence_notes: ["string"],
     };
 
+    const sourceBlock = sources
+      .map((source) => `\n=== SOURCE FILE: ${source.name} ===\n${source.text}\n=== END SOURCE: ${source.name} ===`)
+      .join("\n");
+
     const prompt = `Kamu adalah senior brand strategist dan B2B market researcher.
 
 BRAND YANG SEDANG DIBANGUN: ${brandName || "Nama brand belum diberikan"}
 
-Baca seluruh file yang dilampirkan dan ekstrak Brand Intelligence yang relevan untuk pembuatan konten social media.
+Baca seluruh teks hasil ekstraksi file di bawah dan ekstrak Brand Intelligence yang relevan untuk pembuatan konten social media.
 Gunakan kerangka Understand Markets, Customers, and Capabilities dengan STP (Segmentation, Targeting, Positioning).
 
 ATURAN KETAT:
@@ -164,38 +162,43 @@ ATURAN KETAT:
 7. Allowed/prohibited claims harus konservatif. Jangan mengubah inference menjadi klaim fakta.
 8. Tulis seluruh output human-facing dalam Bahasa Indonesia, kecuali proper noun/istilah resmi.
 9. Cantumkan setiap file pada source_files dan jelaskan singkat kontribusi file tersebut.
+10. Jika hasil ekstraksi PDF kehilangan layout tabel atau urutan visual, jangan menebak isi yang hilang. Gunakan hanya teks yang terbaca.
 
 Kembalikan HANYA satu JSON valid tanpa markdown dengan struktur persis seperti ini:
-${JSON.stringify(contract, null, 2)}`;
+${JSON.stringify(contract, null, 2)}
+
+${sourceBlock}`;
 
     const model = getAIModel();
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-
-    const response = await fetch(endpoint, {
+    const response = await fetch("https://api.deepseek.com/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        contents: [
+        model,
+        messages: [
           {
-            role: "user",
-            parts: [{ text: prompt }, ...fileParts],
+            role: "system",
+            content: "Kamu adalah senior brand strategist. Keluarkan hanya JSON valid sesuai contract. Jangan membuat informasi yang tidak ada di sumber.",
           },
+          { role: "user", content: prompt },
         ],
+        temperature: 0.15,
+        response_format: { type: "json_object" },
       }),
       cache: "no-store",
     });
 
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const detail = payload?.error?.message || `Gemini request failed (${response.status})`;
-      return errorJson(`Gemini ${response.status}: ${String(detail)}`, response.status === 429 ? 429 : 502);
+      const detail = payload?.error?.message || payload?.message || `DeepSeek request failed (${response.status})`;
+      return errorJson(`DeepSeek ${response.status}: ${String(detail)}`, response.status === 429 ? 429 : 502);
     }
 
-    const text = extractText(payload);
-    if (!text) return errorJson("Gemini tidak mengembalikan hasil ekstraksi.", 502);
+    const text = extractChatCompletionText(payload);
+    if (!text) return errorJson("DeepSeek tidak mengembalikan hasil ekstraksi.", 502);
 
     const raw = extractJson(text) as Record<string, unknown>;
     const data = {
@@ -215,7 +218,7 @@ ${JSON.stringify(contract, null, 2)}`;
       prohibited_claims: normalizeArray(raw.prohibited_claims),
       communication_dos: normalizeArray(raw.communication_dos),
       communication_donts: normalizeArray(raw.communication_donts),
-      source_files: normalizeSources(raw.source_files, sourceNames),
+      source_files: normalizeSources(raw.source_files, sources.map((source) => source.name)),
       confidence_notes: normalizeArray(raw.confidence_notes),
     };
 
