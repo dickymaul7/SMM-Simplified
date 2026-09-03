@@ -19,6 +19,7 @@ type QuickBrief = {
   cta?: string;
   preferredFormat?: "auto" | "carousel" | "reels" | "single_post";
   extraContext?: string;
+  storyAngleCount: number;
 };
 
 type QueryPlan = { queries: string[] };
@@ -82,9 +83,20 @@ function formatLabel(format: QuickBrief["preferredFormat"]) {
   return "Pilih format terbaik per angle berdasarkan kekuatan cerita.";
 }
 
+function firstText(value: unknown) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item ?? "").trim())
+      .filter(Boolean)
+      .join(", ");
+  }
+  return String(value ?? "").trim();
+}
+
 export async function POST(request: Request) {
   try {
     const body = (await request.json().catch(() => ({}))) as Partial<QuickBrief>;
+    const requestedCount = Math.min(10, Math.max(1, Number(body.storyAngleCount ?? 5) || 5));
     const input: QuickBrief = {
       brandId: String(body.brandId ?? "").trim() || undefined,
       brandName: String(body.brandName ?? "").trim(),
@@ -95,10 +107,11 @@ export async function POST(request: Request) {
       cta: String(body.cta ?? "").trim(),
       preferredFormat: body.preferredFormat ?? "auto",
       extraContext: String(body.extraContext ?? "").trim(),
+      storyAngleCount: requestedCount,
     };
 
-    if ((!input.brandId && !input.brandName) || !input.topic || !input.audience || !input.objective) {
-      return errorJson("Brand, topik/program, target audience, dan objective wajib diisi.");
+    if ((!input.brandId && !input.brandName) || !input.topic) {
+      return errorJson("Brand dan topik/program wajib diisi.");
     }
     if (!process.env.GEMINI_API_KEY?.trim()) return errorJson("GEMINI_API_KEY belum dikonfigurasi.", 503);
     if (!process.env.TAVILY_API_KEY?.trim()) return errorJson("TAVILY_API_KEY belum dikonfigurasi.", 503);
@@ -136,6 +149,20 @@ export async function POST(request: Request) {
       existingGuideline = result.data;
     }
 
+    // Brand Intelligence is the fallback source of truth for fields that the
+    // user intentionally leaves blank in Quick Brief. Explicit user input wins.
+    const brandAudience = firstText(existingGuideline?.target_audiences);
+    const brandPainPoints = firstText(existingGuideline?.audience_pain_points);
+    const brandObjective = firstText(existingGuideline?.marketing_objectives ?? existingGuideline?.business_objectives);
+    const resolvedAudience = input.audience || brandAudience;
+    const resolvedObjective = input.objective || brandObjective || "Membangun awareness dan consideration yang relevan dengan positioning brand.";
+
+    if (!resolvedAudience) {
+      return errorJson("Audience belum tersedia. Isi Audience di Brief Studio atau lengkapi Target Audience pada Brand Intelligence.");
+    }
+    input.audience = resolvedAudience;
+    input.objective = resolvedObjective;
+
     const knowledge = await loadStorytellingKnowledge();
     const today = new Date().toISOString().slice(0, 10);
     const queryPlan = await createStructuredJson<QueryPlan>({
@@ -154,9 +181,10 @@ ${compactJson(existingGuideline ? {
   audience_pain_points: existingGuideline.audience_pain_points,
   core_expertise: existingGuideline.core_expertise,
   brand_pov: existingGuideline.brand_pov,
+  marketing_objectives: existingGuideline.marketing_objectives,
 } : null)}
 
-Buat tepat 4 query web untuk menemukan kasus perusahaan/organisasi nyata yang relevan dengan topik dan business problem campaign.
+Buat tepat 4 query web untuk menemukan kasus perusahaan/organisasi nyata yang relevan dengan topik, audience, dan business problem campaign.
 1. Query recent incident/failure/enforcement/strategic tension.
 2. Query official/regulator/company evidence.
 3. Query implementation/turnaround/successful response.
@@ -190,8 +218,13 @@ ${knowledge}
 QUICK INPUT — ini sengaja singkat. Bangun konteks editorial yang dibutuhkan secara konservatif:
 ${compactJson(input)}
 
-EXISTING BRAND INTELLIGENCE — gunakan jika tersedia, jangan bertentangan tanpa alasan:
+EXISTING BRAND INTELLIGENCE — ini adalah SOURCE OF TRUTH brand. Gunakan sebagai fondasi, bukan sekadar referensi. User input hanya boleh override field yang memang diisi user.
 ${compactJson(existingGuideline ? { brand: existingBrand, guideline: existingGuideline } : null)}
+
+RESOLVED CONTEXT:
+- Audience: ${resolvedAudience}
+- Objective: ${resolvedObjective}
+- Brand pain points: ${brandPainPoints || "Gunakan data guideline yang tersedia."}
 
 LIVE WEB SOURCES — fakta kasus hanya boleh berasal dari katalog ini:
 ${sourceCatalog}
@@ -200,15 +233,23 @@ TUGAS:
 1. Bentuk hidden brand profile yang cukup untuk menulis konten berkualitas. Ini adalah editorial inference, bukan klaim fakta perusahaan.
 2. Turunkan campaign logic: desired perception, business problem, key message, funnel stage.
 3. Pilih 3-4 kasus nyata dengan tension + mechanism kuat. Setiap kasus idealnya punya >=2 source refs.
-4. Buat tepat 5 content angles yang case-led dan non-generic.
+4. Buat hingga ${input.storyAngleCount} content angles yang case-led dan non-generic. Targetkan tepat ${input.storyAngleCount} jika tersedia cukup angle yang benar-benar berbeda dan kuat. Jika tidak, berhenti pada jumlah yang lebih sedikit daripada membuat filler.
+
+ATURAN BRAND FIT — WAJIB:
+- Brand Intelligence adalah source of truth untuk positioning, audience, pain points, expertise/capabilities, brand POV, key messages, tone, communication dos/don'ts, allowed/prohibited claims, dan differentiation.
+- Jangan menciptakan capability, produk, customer, angka, result, atau claim yang tidak didukung Brand Intelligence.
+- Setiap angle harus punya alasan jelas mengapa relevan untuk audience dan positioning brand ini.
+- Brand POV harus spesifik terhadap brand, bukan opini generik yang bisa ditempel ke kompetitor.
+- Jika angle bisa dipakai kompetitor tanpa perubahan substansial, revisi angle tersebut.
 
 ATURAN KUALITAS:
 - Jangan membuat ide dari topik saja. Wajib Case/Evidence → Tension → Mechanism → Insight → Brand POV.
+- Setiap angle harus berbeda secara substantif pada thesis, tension, mechanism, atau audience implication; jangan membuat variasi judul dari ide yang sama.
 - Judul harus spesifik dan curiosity-driving tanpa clickbait palsu.
 - Utamakan kasus yang membuat audience berpikir “kok bisa?”.
 - Jangan membuat angka, quote, motive, legal finding, atau hubungan sebab-akibat yang tidak didukung source.
 - Semua human-facing text dalam Bahasa Indonesia; nama perusahaan, produk, istilah resmi, dan judul sumber boleh tetap asli.
-- Audience adalah ${input.audience}. Beri implikasi yang relevan dengan senioritas/profesi mereka.
+- Audience adalah ${resolvedAudience}. Beri implikasi yang relevan dengan senioritas/profesi mereka.
 - ${formatLabel(input.preferredFormat)}
 - Extra context user: ${input.extraContext || "Tidak ada."}
 - Brand promotion tidak boleh muncul terlalu cepat; insight harus earned.
@@ -295,7 +336,7 @@ ATURAN KUALITAS:
       product_or_program: input.topic,
       key_message: synthesis.campaign.key_message,
       cta: input.cta || null,
-      content_target: 5,
+      content_target: synthesisIdeas.length,
       status: "draft",
     }).select("id").single();
     if (campaignError || !campaign) throw new Error(campaignError?.message || "Gagal membuat campaign.");
@@ -342,7 +383,7 @@ ATURAN KUALITAS:
     }
 
     const bestId = caseIdByKey.get(best.item.key)!;
-    const ideaRows = synthesisIdeas.map((idea) => {
+    const ideaRows = synthesisIdeas.slice(0, input.storyAngleCount).map((idea) => {
       const referencedCase = caseIdByKey.get(idea.case_key) || bestId;
       const preferred = input.preferredFormat && input.preferredFormat !== "auto" ? input.preferredFormat : idea.recommended_format;
       return {
@@ -363,7 +404,7 @@ ATURAN KUALITAS:
     const { error: ideaError } = await supabase.from("content_ideas").insert(ideaRows);
     if (ideaError) throw new Error(ideaError.message);
 
-    return NextResponse.json({ ok: true, campaignId: campaign.id, ideasCreated: ideaRows.length, verifiedCases: eligible.length });
+    return NextResponse.json({ ok: true, campaignId: campaign.id, ideasCreated: ideaRows.length, verifiedCases: eligible.length, brandContextUsed: Boolean(existingGuideline), resolvedAudience });
   } catch (error) {
     console.error("StoryBrief angles error", error);
     return errorJson(error instanceof Error ? error.message : "Gagal menghasilkan storytelling angles.", 500);

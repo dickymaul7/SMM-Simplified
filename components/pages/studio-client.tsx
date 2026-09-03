@@ -60,7 +60,6 @@ export default function StudioClient() {
       const saved = window.localStorage.getItem(QUICK_BRIEF_DRAFT_KEY);
       if (saved) {
         const draft = JSON.parse(saved) as Partial<QuickBriefDraft>;
-
         setBrandName(draft.brandName ?? "");
         setWebsite(draft.website ?? "");
         setTopic(draft.topic ?? "");
@@ -226,8 +225,6 @@ export default function StudioClient() {
         throw new Error(payload?.error || "Generate gagal.");
       }
 
-      // Important: draft is intentionally NOT cleared here.
-      // User can return to "Buat Brief" without filling everything again.
       router.push(`/campaign/${payload.campaignId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Generate gagal.");
@@ -258,7 +255,7 @@ export default function StudioClient() {
                 </h1>
                 <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-500">
                   Susun konteks utama, lalu gunakan live research untuk
-                  menghasilkan lima story angle berbasis kasus.
+                  menghasilkan story angles berbasis kasus.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -286,7 +283,7 @@ export default function StudioClient() {
                       Quick Brief
                     </h2>
                     <p className="mt-0.5 text-xs leading-5 text-slate-500">
-                      Brand mengikuti Global Brand Selector. Input campaign tetap tersimpan saat Anda berpindah workspace.
+                      Brand mengikuti Global Brand Selector. Field yang dikosongkan akan otomatis menggunakan Brand Intelligence brand aktif.
                     </p>
                   </div>
 
@@ -343,12 +340,14 @@ export default function StudioClient() {
                     3. Siapa audience utamanya?
                   </label>
                   <textarea
-                    required
                     className={`${inputClass} min-h-24 resize-y`}
                     value={audience}
                     onChange={(e) => setAudience(e.target.value)}
-                    placeholder="Contoh: HR Manager, Head of Compliance, Director, business owner..."
+                    placeholder="Kosongkan untuk otomatis menggunakan Target Audience dari Brand Intelligence"
                   />
+                  <p className="mt-1.5 text-xs text-slate-400">
+                    Opsional. Jika kosong, AI menggunakan Target Audience yang tersimpan pada Brand Intelligence.
+                  </p>
                 </div>
 
                 <div>
@@ -356,12 +355,14 @@ export default function StudioClient() {
                     4. Apa hasil yang ingin dicapai?
                   </label>
                   <textarea
-                    required
                     className={`${inputClass} min-h-24 resize-y`}
                     value={objective}
                     onChange={(e) => setObjective(e.target.value)}
-                    placeholder="Contoh: membangun awareness bahwa anti-suap perlu dioperasionalkan sebagai sistem, bukan hanya kebijakan."
+                    placeholder="Kosongkan untuk menggunakan objective dari Brand Intelligence / default editorial objective"
                   />
+                  <p className="mt-1.5 text-xs text-slate-400">
+                    Opsional. Input yang kamu isi akan meng-override konteks Brand Intelligence untuk campaign ini.
+                  </p>
                 </div>
 
                 <div>
@@ -390,9 +391,7 @@ export default function StudioClient() {
                       <button
                         key={value}
                         type="button"
-                        onClick={() =>
-                          setPreferredFormat(value as typeof preferredFormat)
-                        }
+                        onClick={() => setPreferredFormat(value as typeof preferredFormat)}
                         className={`rounded-full px-4 py-2 text-sm font-medium ${
                           preferredFormat === value
                             ? "bg-slate-950 text-white"
@@ -429,7 +428,7 @@ export default function StudioClient() {
                 >
                   {loading
                     ? "AI sedang riset kasus & menyusun angle..."
-                    : "Cari Kasus & Buat 5 Story Angles →"}
+                    : "Cari Kasus & Buat Story Angles →"}
                 </button>
 
                 <p className="text-center text-xs leading-5 text-slate-400">
@@ -475,9 +474,7 @@ export default function StudioClient() {
                         <p className="text-sm font-semibold text-slate-900 group-hover:text-blue-700">
                           {item.product_or_program || item.name}
                         </p>
-                        <span className="text-slate-300 group-hover:text-blue-500">
-                          →
-                        </span>
+                        <span className="text-slate-300 group-hover:text-blue-500">→</span>
                       </div>
                       <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
                         {item.objective}
