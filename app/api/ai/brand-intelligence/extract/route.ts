@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import pdfParse from "pdf-parse";
+// pdf-parse 1.1.1 has a debug block in its package entrypoint that tries to
+// open its own test PDF during Next/Vercel build. Import the parser module
+// directly to avoid executing that package-level test/debug block.
+// @ts-expect-error pdf-parse/lib/pdf-parse has no dedicated TypeScript declaration.
+import pdfParse from "pdf-parse/lib/pdf-parse.js";
 
 import { getAIModel } from "@/lib/ai/core";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
