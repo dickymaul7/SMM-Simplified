@@ -5,6 +5,16 @@ import { createPortal } from "react-dom";
 
 import { createClient } from "@/lib/supabase/client";
 
+const MEDIA_BUCKET = "smm-publisher-media";
+const MAX_FILE_BYTES = 50 * 1024 * 1024;
+const ALLOWED_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "video/mp4",
+  "video/quicktime",
+]);
+
 type Brief = {
   id: string;
   title: string;
@@ -62,6 +72,18 @@ function defaultCaption(brief: Brief | null) {
     .join("\n\n");
 }
 
+function safeFileName(name: string) {
+  const parts = name.split(".");
+  const extension = parts.length > 1 ? `.${parts.pop()}` : "";
+  const base = parts.join(".") || "media";
+  return `${base.toLowerCase().replace(/[^a-z0-9-_]+/g, "-").replace(/^-+|-+$/g, "") || "media"}${extension.toLowerCase()}`;
+}
+
+function fileSizeLabel(bytes: number) {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export default function BufferInstagramPanel() {
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const [briefs, setBriefs] = useState<Brief[]>([]);
@@ -71,6 +93,8 @@ export default function BufferInstagramPanel() {
   const [caption, setCaption] = useState("");
   const [mediaUrl, setMediaUrl] = useState("");
   const [mediaType, setMediaType] = useState<"image" | "video">("image");
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
+  const [publishDate, setPublishDate] = useState("");
   const [publishTime, setPublishTime] = useState("09:00");
   const [loadingChannels, setLoadingChannels] = useState(false);
   const [scheduling, setScheduling] = useState(false);
@@ -177,6 +201,8 @@ export default function BufferInstagramPanel() {
 
       setActiveBriefId(matched.id);
       setCaption(defaultCaption(matched));
+      setPublishDate(matched.scheduledFor);
+      setMediaFile(null);
       const detectedMedia = directMediaUrl(matched.designFileUrl);
       setMediaUrl(detectedMedia);
       setMediaType(inferMediaType(detectedMedia));
@@ -193,25 +219,83 @@ export default function BufferInstagramPanel() {
     [briefs, activeBriefId],
   );
 
+  function selectMedia(file: File | null) {
+    setMessage("");
+    setError("");
+    if (!file) {
+      setMediaFile(null);
+      return;
+    }
+    if (!ALLOWED_TYPES.has(file.type)) {
+      setMediaFile(null);
+      setError("Format file belum didukung. Gunakan JPG, PNG, WEBP, MP4, atau MOV.");
+      return;
+    }
+    if (file.size > MAX_FILE_BYTES) {
+      setMediaFile(null);
+      setError("Ukuran file maksimal 50 MB untuk publisher ini.");
+      return;
+    }
+    setMediaFile(file);
+    setMediaType(file.type.startsWith("video/") ? "video" : "image");
+  }
+
+  async function uploadMedia(brief: Brief) {
+    if (!mediaFile) return mediaUrl.trim();
+
+    const supabase = createClient();
+    const { data: userData } = await supabase.auth.getUser();
+    const user = userData.user;
+    if (!user) throw new Error("Session login tidak valid.");
+
+    const path = `${user.id}/${brief.id}/${Date.now()}-${safeFileName(mediaFile.name)}`;
+    const { error: uploadError } = await supabase.storage
+      .from(MEDIA_BUCKET)
+      .upload(path, mediaFile, { contentType: mediaFile.type, upsert: false });
+
+    if (uploadError) {
+      if (/bucket/i.test(uploadError.message)) {
+        throw new Error("Storage publisher belum aktif. Jalankan database/BUFFER_PUBLISHER_STORAGE.sql di Supabase terlebih dahulu.");
+      }
+      throw uploadError;
+    }
+
+    const { data: publicData } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path);
+    const publicUrl = publicData.publicUrl;
+    if (!publicUrl) throw new Error("Supabase tidak mengembalikan public media URL.");
+
+    const { error: briefUpdateError } = await supabase
+      .from("content_briefs")
+      .update({ design_status: "designed", design_file_url: publicUrl })
+      .eq("id", brief.id);
+    if (briefUpdateError) throw briefUpdateError;
+
+    setBriefs((current) => current.map((item) => item.id === brief.id
+      ? { ...item, designStatus: "designed", designFileUrl: publicUrl }
+      : item));
+    setMediaUrl(publicUrl);
+    return publicUrl;
+  }
+
   async function scheduleToBuffer() {
     if (!activeBrief) {
       setError("Klik kartu Instagram di Calendar terlebih dahulu.");
       return;
     }
     if (activeBrief.humanQcStatus !== "approved") {
-      setError("Human QC Instagram harus approved sebelum dikirim ke Buffer.");
-      return;
-    }
-    if (activeBrief.designStatus !== "designed") {
-      setError("Design Status harus Designed sebelum dikirim ke Buffer.");
+      setError("Human QC Instagram harus approved sebelum dijadwalkan ke Instagram.");
       return;
     }
     if (!channelId) {
       setError("Pilih channel Instagram Buffer terlebih dahulu.");
       return;
     }
-    if (!mediaUrl.trim()) {
-      setError("Masukkan direct public image/video URL. Link editor Canva/Figma tidak dapat dipublish langsung oleh Buffer.");
+    if (!publishDate || !publishTime) {
+      setError("Pilih tanggal dan jam publish terlebih dahulu.");
+      return;
+    }
+    if (!mediaFile && !mediaUrl.trim()) {
+      setError("Upload file design/video terlebih dahulu.");
       return;
     }
 
@@ -220,7 +304,12 @@ export default function BufferInstagramPanel() {
     setError("");
 
     try {
-      const dueAt = new Date(`${activeBrief.scheduledFor}T${publishTime}:00+07:00`).toISOString();
+      const finalMediaUrl = await uploadMedia(activeBrief);
+      if (!finalMediaUrl) throw new Error("Media belum tersedia.");
+
+      const dueAt = new Date(`${publishDate}T${publishTime}:00+07:00`).toISOString();
+      if (Number.isNaN(new Date(dueAt).getTime())) throw new Error("Tanggal/jam publish tidak valid.");
+
       const response = await fetch("/api/buffer/schedule", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -228,16 +317,30 @@ export default function BufferInstagramPanel() {
           channelId,
           text: caption,
           dueAt,
-          mediaUrl: mediaUrl.trim(),
+          mediaUrl: finalMediaUrl,
           mediaType,
         }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload?.ok) throw new Error(payload?.error || "Scheduling Buffer gagal.");
 
-      setMessage(`Scheduled on Buffer ✓ · ${activeBrief.scheduledFor} ${publishTime} WIB`);
+      const supabase = createClient();
+      if (activeBrief.scheduledFor !== publishDate) {
+        const { error: scheduleUpdateError } = await supabase
+          .from("content_briefs")
+          .update({ scheduled_for: publishDate })
+          .eq("id", activeBrief.id);
+        if (scheduleUpdateError) throw scheduleUpdateError;
+      }
+
+      setBriefs((current) => current.map((item) => item.id === activeBrief.id
+        ? { ...item, scheduledFor: publishDate, designStatus: "designed", designFileUrl: finalMediaUrl }
+        : item));
+      setMediaFile(null);
+      setMessage(`Scheduled to Instagram ✓ · ${publishDate} ${publishTime} WIB`);
+      window.dispatchEvent(new Event("buffer-publisher-scheduled"));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Scheduling Buffer gagal.");
+      setError(err instanceof Error ? err.message : "Scheduling Instagram gagal.");
     } finally {
       setScheduling(false);
     }
@@ -249,52 +352,62 @@ export default function BufferInstagramPanel() {
     <div className="mt-5 border-t border-slate-200 pt-5">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Buffer Publisher</p>
-          <p className="mt-1 text-sm font-bold text-slate-900">Instagram Scheduling</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Instagram Publisher</p>
+          <p className="mt-1 text-sm font-bold text-slate-900">Schedule via Buffer</p>
         </div>
-        <span className="rounded-full bg-red-50 px-2.5 py-1 text-[10px] font-semibold text-red-700">Buffer</span>
+        <span className="rounded-full bg-red-50 px-2.5 py-1 text-[10px] font-semibold text-red-700">Instagram</span>
       </div>
 
       {!activeBrief ? (
-        <p className="mt-3 text-xs leading-5 text-slate-500">Klik kartu <strong>Instagram</strong> di Calendar. Panel ini sengaja tidak aktif untuk LinkedIn atau SEO.</p>
+        <p className="mt-3 text-xs leading-5 text-slate-500">Klik kartu <strong>Instagram</strong> di Calendar untuk mulai scheduling.</p>
       ) : (
         <div className="mt-4 space-y-3">
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Selected Instagram Content</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Selected Content</p>
             <p className="mt-1 text-xs font-semibold text-slate-900">{activeBrief.title}</p>
-            <p className="mt-1 text-[10px] text-slate-500">{activeBrief.scheduledFor} · QC {activeBrief.humanQcStatus === "approved" ? "Approved" : "Pending"} · {activeBrief.designStatus === "designed" ? "Designed" : "Not Designed"}</p>
+            <p className="mt-1 text-[10px] text-slate-500">QC {activeBrief.humanQcStatus === "approved" ? "Approved ✓" : "Pending"}</p>
           </div>
 
-          <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400">Instagram Channel</label>
+          <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400">Instagram Account</label>
           <select value={channelId} onChange={(event) => setChannelId(event.target.value)} disabled={loadingChannels} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-xs outline-none focus:border-red-700">
-            <option value="">{loadingChannels ? "Loading Buffer..." : "Pilih channel"}</option>
+            <option value="">{loadingChannels ? "Loading Buffer..." : "Pilih akun Instagram"}</option>
             {channels.map((channel) => <option key={channel.id} value={channel.id}>{channel.displayName || channel.name}</option>)}
           </select>
 
-          <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400">Caption</label>
-          <textarea value={caption} onChange={(event) => setCaption(event.target.value)} rows={6} className="w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-xs leading-5 outline-none focus:border-red-700" />
+          <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400">Upload Design / Video</label>
+          <label className="block cursor-pointer rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-center transition hover:border-red-300 hover:bg-red-50/40">
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime"
+              className="hidden"
+              onChange={(event) => selectMedia(event.target.files?.[0] ?? null)}
+            />
+            <span className="block text-xs font-semibold text-slate-800">{mediaFile ? mediaFile.name : "Pilih JPG / PNG / WEBP / MP4 / MOV"}</span>
+            <span className="mt-1 block text-[10px] text-slate-500">{mediaFile ? fileSizeLabel(mediaFile.size) : "Maks. 50 MB · file otomatis di-upload saat scheduling"}</span>
+          </label>
+          {!mediaFile && mediaUrl && <p className="text-[10px] leading-4 text-emerald-700">Media final tersimpan dan siap digunakan kembali.</p>}
 
-          <div className="grid grid-cols-[1fr_92px] gap-2">
+          <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400">Caption</label>
+          <textarea value={caption} onChange={(event) => setCaption(event.target.value)} rows={7} placeholder="Tulis caption Instagram..." className="w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-xs leading-5 outline-none focus:border-red-700" />
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400">Publish Date</label>
+              <input type="date" value={publishDate} onChange={(event) => setPublishDate(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-xs outline-none focus:border-red-700" />
+            </div>
             <div>
               <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400">Publish Time (WIB)</label>
               <input type="time" value={publishTime} onChange={(event) => setPublishTime(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-xs outline-none focus:border-red-700" />
             </div>
-            <div>
-              <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400">Media</label>
-              <select value={mediaType} onChange={(event) => setMediaType(event.target.value as "image" | "video")} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-2.5 text-xs outline-none focus:border-red-700"><option value="image">Image</option><option value="video">Video</option></select>
-            </div>
           </div>
-
-          <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400">Direct Public Media URL</label>
-          <input type="url" value={mediaUrl} onChange={(event) => { const value = event.target.value; setMediaUrl(value); setMediaType(inferMediaType(value)); }} placeholder="https://.../final-post.jpg" className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-xs outline-none focus:border-red-700" />
-          <p className="text-[10px] leading-4 text-slate-500">Harus URL file publik langsung. Buffer membutuhkan image/video untuk Instagram; link editor Canva/Figma tidak cukup.</p>
 
           {message && <div className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-700">{message}</div>}
           {error && <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>}
 
           <button onClick={scheduleToBuffer} disabled={scheduling || loadingChannels} className="w-full rounded-lg bg-red-600 px-4 py-3 text-xs font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50">
-            {scheduling ? "Scheduling to Buffer..." : "Schedule to Buffer → Instagram"}
+            {scheduling ? "Uploading & Scheduling..." : "Schedule to Instagram"}
           </button>
+          <p className="text-[10px] leading-4 text-slate-500">SMM meng-upload media ke storage publik, mengirim caption + waktu ke Buffer, lalu Buffer menjadwalkannya ke Instagram.</p>
         </div>
       )}
     </div>
