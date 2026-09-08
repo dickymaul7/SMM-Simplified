@@ -29,3 +29,33 @@ Phase 2 safety rules:
 - It protects the final Super Admin from accidental demotion.
 - It does not change RLS on existing business tables.
 - It does not activate workspace-wide permission enforcement yet.
+
+CONTENT EXPANSION V1
+
+Run this additive SQL file once before testing LinkedIn / SEO derivatives:
+  database/CONTENT_EXPANSION_V1.sql
+
+It creates only the new content_expansions table used for channel derivatives.
+
+Content Expansion safety rules:
+- Existing content_briefs, brief_sections, campaigns, brands, research, Calendar, and Design data are untouched.
+- Master Social Brief remains the source of truth.
+- A derivative can only be AI-generated from a Human-QC-approved Master Brief.
+- LinkedIn and SEO derivatives have their own editable draft, Alignment Check, and Human QC status.
+- Existing business-table RLS is not changed.
+- The new table uses temporary authenticated-workspace policies consistent with current workspace-wide enforcement being OFF; brand-level isolation remains a later access-control phase.
+
+BUFFER / INSTAGRAM PUBLISHER MEDIA
+
+Run this additive SQL file once before testing direct media upload from Calendar:
+  database/BUFFER_PUBLISHER_STORAGE.sql
+
+It creates one dedicated public Supabase Storage bucket:
+  smm-publisher-media
+
+Publisher Storage safety rules:
+- It does not create, alter, or drop any SMM business table.
+- It does not modify Combined tables or Combined-specific RLS.
+- Authenticated users can write only inside their own user-id folder.
+- Media is public-read because Buffer/Instagram must be able to fetch the scheduled image/video.
+- Allowed formats: JPG, PNG, WEBP, MP4, MOV; maximum file size 50 MB.

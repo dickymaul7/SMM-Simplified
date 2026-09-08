@@ -112,21 +112,21 @@ export default function AppHeader() {
     : activeBrand.id;
 
   const sidebar = (
-    <aside className="flex h-full flex-col bg-[#111827] text-white">
-      <div className="flex h-[76px] items-center gap-3 border-b border-white/8 px-5">
-        <div className="grid h-9 w-9 place-items-center rounded-xl bg-blue-600 shadow-lg shadow-blue-950/30">
-          <span className="text-sm font-black tracking-tight">SM</span>
+    <aside className="flex h-full flex-col bg-[#1e171a] text-[#eee]">
+      <div className="flex items-center gap-[11px] px-5 pb-6 pt-[22px]">
+        <div className="grid h-[34px] w-[34px] place-items-center rounded-[9px] bg-[#8d1730] text-sm font-extrabold text-white">
+          <span>SM</span>
         </div>
         <div className="min-w-0">
-          <p className="truncate text-sm font-bold tracking-tight">SMM Simplified</p>
-          <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Content operations</p>
+          <p className="truncate text-sm font-bold tracking-tight text-white">SMM Simplified</p>
+          <p className="mt-[3px] text-[11px] text-[#aaa1a5]">Content Operations</p>
         </div>
       </div>
 
-      <div className="border-b border-white/8 px-3 py-4">
-        <div className="mb-2 flex items-center justify-between px-1">
-          <label htmlFor="global-active-brand" className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Active Brand</label>
-          <span className="text-[10px] font-medium text-slate-600">{brandLoading ? "Loading..." : `${brands.length} brands`}</span>
+      <div className="border-y border-[#332a2d] px-[14px] py-4">
+        <div className="mb-2 flex items-center justify-between px-2">
+          <label htmlFor="global-active-brand" className="text-[10px] font-medium uppercase tracking-[1.2px] text-[#82777b]">Active Brand</label>
+          <span className="text-[10px] text-[#82777b]">{brandLoading ? "Loading..." : `${brands.length} brands`}</span>
         </div>
         <div className="relative">
           <select
@@ -135,40 +135,39 @@ export default function AppHeader() {
             disabled={brandLoading || !hydrated}
             value={selectedValue}
             onChange={(event) => changeActiveBrand(event.target.value)}
-            className="w-full appearance-none rounded-xl border border-white/10 bg-white/[0.06] py-2.5 pl-3 pr-9 text-[13px] font-semibold text-slate-100 outline-none transition hover:bg-white/[0.09] focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-wait disabled:opacity-60"
+            className="w-full appearance-none rounded-lg border border-[#3b3135] bg-[#2a2225] py-2.5 pl-3 pr-9 text-[12px] font-medium text-[#eee] outline-none transition hover:border-[#514348] focus:border-[#8d1730] disabled:cursor-wait disabled:opacity-60"
           >
-            <option value={ACTIVE_BRAND_ALL} className="bg-slate-900 text-white">All Brands</option>
+            <option value={ACTIVE_BRAND_ALL} className="bg-[#1e171a] text-white">All Brands</option>
             {brands.map((brand) => (
-              <option key={brand.id} value={brand.id} className="bg-slate-900 text-white">{brand.name}</option>
+              <option key={brand.id} value={brand.id} className="bg-[#1e171a] text-white">{brand.name}</option>
             ))}
           </select>
-          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#82777b]">
             <path d="m7 10 5 5 5-5" />
           </svg>
         </div>
-        <p className="mt-2 px-1 text-[10px] leading-4 text-slate-600">Pilihan ini menjadi context global untuk workspace.</p>
+        <p className="mt-2 px-2 text-[10px] leading-4 text-[#82777b]">Pilihan ini menjadi context global untuk workspace.</p>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 py-5">
-        <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-600">Workspace</p>
-        <nav aria-label="Main navigation" className="space-y-1">
+      <div className="flex-1 overflow-y-auto px-[14px] py-5">
+        <p className="mb-[9px] px-[10px] text-[10px] font-medium uppercase tracking-[1.2px] text-[#82777b]">Workspace</p>
+        <nav aria-label="Main navigation">
           {navigation.map((item) => {
             const active = isActive(item.href);
-            return <Link key={item.href} href={item.href} onClick={() => setOpen(false)} aria-current={active ? "page" : undefined} className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-semibold transition ${active ? "bg-white/10 text-white shadow-sm ring-1 ring-white/5" : "text-slate-400 hover:bg-white/5 hover:text-slate-100"}`}>
-              <span className={active ? "text-blue-400" : "text-slate-500 group-hover:text-slate-300"}><NavIcon name={item.icon} /></span>
-              {item.label}
-              {active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-blue-400" />}
+            return <Link key={item.href} href={item.href} onClick={() => setOpen(false)} aria-current={active ? "page" : undefined} className={`my-[2px] flex w-full items-center gap-[11px] rounded-lg px-3 py-[11px] text-[13px] font-medium transition ${active ? "bg-[#8d1730] text-white" : "text-[#bdb4b7] hover:bg-[#2a2225] hover:text-white"}`}>
+              <span className="shrink-0"><NavIcon name={item.icon} /></span>
+              <span>{item.label}</span>
             </Link>;
           })}
         </nav>
       </div>
 
-      <div className="border-t border-white/8 p-3">
-        <div className="mb-2 rounded-xl bg-white/[0.035] px-3 py-3">
-          <p className="text-xs font-semibold text-slate-200">Production workspace</p>
-          <p className="mt-1 text-[11px] leading-4 text-slate-500">Research, briefs, scheduling, and design handoff.</p>
+      <div className="border-t border-[#332a2d] px-[14px] pb-[14px] pt-[10px]">
+        <div className="mb-2 rounded-lg bg-[#2a2225] px-3 py-3">
+          <p className="text-xs font-semibold text-[#eee]">Production workspace</p>
+          <p className="mt-1 text-[10px] leading-4 text-[#aaa1a5]">Research, briefs, scheduling, and design handoff.</p>
         </div>
-        <button onClick={signOut} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] font-semibold text-slate-400 transition hover:bg-white/5 hover:text-white">
+        <button onClick={signOut} className="my-[2px] flex w-full items-center gap-[11px] rounded-lg px-3 py-[11px] text-left text-[13px] font-medium text-[#bdb4b7] transition hover:bg-[#2a2225] hover:text-white">
           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-[18px] w-[18px]"><path d="M10 17l5-5-5-5M15 12H3" /><path d="M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5" /></svg>
           Sign out
         </button>
@@ -177,17 +176,17 @@ export default function AppHeader() {
   );
 
   return <>
-    <header className="no-print fixed inset-x-0 top-0 z-40 flex h-[60px] items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur lg:hidden">
+    <header className="no-print fixed inset-x-0 top-0 z-40 flex h-[60px] items-center justify-between border-b border-slate-200 bg-white px-4 lg:hidden">
       <button onClick={() => setOpen(true)} aria-label="Open navigation" aria-expanded={open} className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">
         <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
       </button>
       <p className="text-sm font-bold tracking-tight text-slate-900">{current}</p>
-      <div className="grid h-9 w-9 place-items-center rounded-lg bg-slate-900 text-[10px] font-black text-white">SM</div>
+      <div className="grid h-[34px] w-[34px] place-items-center rounded-[9px] bg-[#8d1730] text-[10px] font-black text-white">SM</div>
     </header>
-    <div className="no-print fixed inset-y-0 left-0 z-50 hidden w-64 lg:block">{sidebar}</div>
+    <div className="no-print fixed inset-y-0 left-0 z-50 hidden w-[258px] lg:block">{sidebar}</div>
     {open && <div className="no-print fixed inset-0 z-50 lg:hidden">
-      <button aria-label="Close navigation" onClick={() => setOpen(false)} className="absolute inset-0 bg-slate-950/55 backdrop-blur-[2px]" />
-      <div className="absolute inset-y-0 left-0 w-[min(18rem,86vw)] shadow-2xl">{sidebar}</div>
+      <button aria-label="Close navigation" onClick={() => setOpen(false)} className="absolute inset-0 bg-[#1e171a]/60" />
+      <div className="absolute inset-y-0 left-0 w-[min(258px,86vw)] shadow-2xl">{sidebar}</div>
     </div>}
   </>;
 }

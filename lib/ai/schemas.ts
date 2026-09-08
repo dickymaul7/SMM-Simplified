@@ -22,17 +22,7 @@ export const angleSynthesisSchema = {
     brand_profile: {
       type: "object",
       additionalProperties: false,
-      required: [
-        "positioning",
-        "value_proposition",
-        "audience_pain_points",
-        "tone_of_voice",
-        "key_messages",
-        "brand_pov",
-        "core_expertise",
-        "communication_dos",
-        "communication_donts"
-      ],
+      required: ["positioning", "value_proposition", "audience_pain_points", "tone_of_voice", "key_messages", "brand_pov", "core_expertise", "communication_dos", "communication_donts"],
       properties: {
         positioning: { type: "string" },
         value_proposition: { type: "string" },
@@ -63,11 +53,7 @@ export const angleSynthesisSchema = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: [
-          "key", "company_name", "case_title", "case_summary", "business_problem", "tension",
-          "decision_or_move", "mechanism", "outcome", "executive_implication", "relevance_score",
-          "credibility_score", "tension_score", "executive_value_score", "brand_fit_score", "confidence", "sources"
-        ],
+        required: ["key", "company_name", "case_title", "case_summary", "business_problem", "tension", "decision_or_move", "mechanism", "outcome", "executive_implication", "relevance_score", "credibility_score", "tension_score", "executive_value_score", "brand_fit_score", "confidence", "sources"],
         properties: {
           key: { type: "string" },
           company_name: { type: "string" },
@@ -105,8 +91,8 @@ export const angleSynthesisSchema = {
     },
     ideas: {
       type: "array",
-      minItems: 5,
-      maxItems: 5,
+      minItems: 1,
+      maxItems: 10,
       items: {
         type: "object",
         additionalProperties: false,
@@ -128,10 +114,7 @@ export const angleSynthesisSchema = {
 export const briefSchema = {
   type: "object",
   additionalProperties: false,
-  required: [
-    "content_objective", "target_audience", "funnel_stage", "editorial_thesis", "case_evidence", "why_this_case",
-    "tension", "core_insight", "brand_pov", "capability_bridge", "story_arc", "cta", "fact_check_notes", "sections"
-  ],
+  required: ["content_objective", "target_audience", "funnel_stage", "editorial_thesis", "case_evidence", "why_this_case", "tension", "core_insight", "brand_pov", "capability_bridge", "story_arc", "cta", "fact_check_notes", "sections"],
   properties: {
     content_objective: { type: "string" },
     target_audience: { type: "string" },
@@ -172,11 +155,7 @@ export const briefSchema = {
 export const qualitySchema = {
   type: "object",
   additionalProperties: false,
-  required: [
-    "case_strength", "hook_strength", "tension", "insight_depth", "mechanism_clarity", "audience_relevance",
-    "brand_fit", "brand_pov", "story_flow", "non_generic_score", "conversion_naturalness", "evidence_safety",
-    "reviewer_notes", "required_revisions"
-  ],
+  required: ["case_strength", "hook_strength", "tension", "insight_depth", "mechanism_clarity", "audience_relevance", "brand_fit", "brand_pov", "story_flow", "non_generic_score", "conversion_naturalness", "evidence_safety", "reviewer_notes", "required_revisions"],
   properties: {
     case_strength: score,
     hook_strength: score,

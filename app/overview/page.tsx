@@ -1,7 +1,7 @@
-import OverviewClient from "@/components/pages/overview-client";
+import RoleAwareOverview from "@/components/pages/role-aware-overview";
 
 export const dynamic = "force-dynamic";
 
 export default function OverviewPage() {
-  return <OverviewClient />;
+  return <RoleAwareOverview />;
 }
