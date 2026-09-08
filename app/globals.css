@@ -1,8 +1,71 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  /* Proxsis brand primitives */
+  --px-brand-red: #DE0016;
+  --px-brand-charcoal: #454545;
+  --px-brand-gray: #9B9A99;
+  --px-brand-offwhite: #F1F0EE;
+
+  /* Red scale */
+  --px-red-50: #FFF0F1;
+  --px-red-100: #FFD8DC;
+  --px-red-200: #FFB3BA;
+  --px-red-600: #DE0016;
+  --px-red-700: #B90012;
+  --px-red-800: #94000E;
+
+  /* Neutral scale */
+  --px-neutral-0: #FFFFFF;
+  --px-neutral-50: #FAFAF9;
+  --px-neutral-100: #F1F0EE;
+  --px-neutral-200: #E3E1DE;
+  --px-neutral-300: #CBC8C4;
+  --px-neutral-400: #9B9A99;
+  --px-neutral-500: #777674;
+  --px-neutral-600: #5C5B59;
+  --px-neutral-700: #454545;
+  --px-neutral-800: #2F2F2E;
+  --px-neutral-900: #1F1F1E;
+
+  /* Semantic */
+  --px-color-bg-canvas: var(--px-brand-offwhite);
+  --px-color-bg-surface: #FFFFFF;
+  --px-color-bg-subtle: #FAFAF9;
+  --px-color-bg-inverse: #454545;
+  --px-color-text-primary: #454545;
+  --px-color-text-strong: #2F2F2E;
+  --px-color-text-secondary: #5C5B59;
+  --px-color-text-tertiary: #777674;
+  --px-color-text-link: #B90012;
+  --px-color-border-subtle: #E3E1DE;
+  --px-color-border-default: #CBC8C4;
+  --px-color-border-focus: #B90012;
+  --px-color-action-primary: #DE0016;
+  --px-color-action-primary-hover: #B90012;
+  --px-color-action-primary-active: #94000E;
+  --px-color-success: #146C43;
+  --px-color-success-bg: #EAF7F0;
+  --px-color-warning: #8A4B00;
+  --px-color-warning-bg: #FFF4E5;
+  --px-color-info: #175CD3;
+  --px-color-info-bg: #EFF4FF;
+  --px-color-error: #8C000E;
+  --px-color-error-bg: #FFF0F1;
+
+  /* Product system */
+  --px-font-family-ui: "Roboto", Arial, Helvetica, sans-serif;
+  --px-radius-sm: 6px;
+  --px-radius-md: 8px;
+  --px-radius-lg: 12px;
+  --px-radius-xl: 16px;
+  --px-shadow-sm: 0 1px 2px rgba(31,31,30,.08);
+  --px-shadow-md: 0 4px 12px rgba(31,31,30,.10);
+  --px-shadow-lg: 0 12px 32px rgba(31,31,30,.14);
+  --px-ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  --background: var(--px-color-bg-canvas);
+  --foreground: var(--px-color-text-primary);
 }
 
 * { box-sizing: border-box; }
@@ -11,10 +74,84 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--px-font-family-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
 }
 button, input, textarea, select { font: inherit; }
 a { color: inherit; text-decoration: none; }
+button, a, input, textarea, select { transition-duration: 150ms; transition-timing-function: var(--px-ease-standard); }
+
+:focus-visible {
+  outline: 2px solid var(--px-color-border-focus) !important;
+  outline-offset: 2px;
+}
+
+::selection { background: var(--px-red-100); color: var(--px-red-800); }
+
+/*
+ * Compatibility bridge for the existing SMM Simplified UI.
+ * This intentionally remaps visual utility classes only; no component behavior,
+ * route, state, data, or interaction logic is changed.
+ */
+.bg-slate-950 { background-color: var(--px-neutral-800) !important; }
+.bg-slate-900 { background-color: var(--px-neutral-800) !important; }
+.bg-slate-100 { background-color: var(--px-neutral-100) !important; }
+.bg-slate-50 { background-color: var(--px-neutral-50) !important; }
+.bg-white { background-color: var(--px-color-bg-surface) !important; }
+.text-slate-950, .text-slate-900 { color: var(--px-color-text-strong) !important; }
+.text-slate-800, .text-slate-700 { color: var(--px-color-text-primary) !important; }
+.text-slate-600 { color: var(--px-color-text-secondary) !important; }
+.text-slate-500 { color: var(--px-color-text-tertiary) !important; }
+.text-slate-400 { color: var(--px-color-text-tertiary) !important; }
+.border-slate-300 { border-color: var(--px-color-border-default) !important; }
+.border-slate-200 { border-color: var(--px-color-border-subtle) !important; }
+
+/* Legacy blue action/accent utilities become the canonical Proxsis action system. */
+.bg-blue-600 { background-color: var(--px-color-action-primary) !important; }
+.bg-blue-700 { background-color: var(--px-color-action-primary-hover) !important; }
+.bg-blue-50 { background-color: var(--px-red-50) !important; }
+.text-blue-700, .text-blue-600 { color: var(--px-red-700) !important; }
+.text-blue-300 { color: var(--px-red-200) !important; }
+.border-blue-500, .border-blue-400, .border-blue-300 { border-color: var(--px-red-200) !important; }
+.focus\:border-blue-500:focus { border-color: var(--px-color-border-focus) !important; }
+.focus\:ring-blue-50:focus { --tw-ring-color: rgba(222,0,22,.10) !important; }
+.hover\:bg-blue-700:hover { background-color: var(--px-color-action-primary-hover) !important; }
+.hover\:bg-blue-50\/40:hover { background-color: rgba(255,240,241,.7) !important; }
+.hover\:border-blue-300:hover { border-color: var(--px-red-200) !important; }
+
+/* Selected states that previously used dark slate are converted to Proxsis selection red. */
+.px-selected,
+[data-px-selected="true"] { background: var(--px-red-50); color: var(--px-red-700); }
+
+/* Product surfaces */
+.shadow-sm { box-shadow: var(--px-shadow-sm) !important; }
+.shadow-xl, .shadow-2xl { box-shadow: var(--px-shadow-lg) !important; }
+
+/* Semantic feedback remains semantic rather than becoming brand-red. */
+.bg-emerald-50 { background-color: var(--px-color-success-bg) !important; }
+.text-emerald-700 { color: var(--px-color-success) !important; }
+.border-emerald-200 { border-color: #A7DEC3 !important; }
+.bg-red-50 { background-color: var(--px-color-error-bg) !important; }
+.text-red-700 { color: var(--px-color-error) !important; }
+
+/* Default form treatment for existing controls. */
+input:not([type="checkbox"]):not([type="radio"]), textarea, select {
+  color: var(--px-color-text-primary);
+}
+input::placeholder, textarea::placeholder { color: var(--px-color-text-tertiary); opacity: 1; }
+
+/* Responsive utility shell helpers used by redesigned shared surfaces. */
+.px-app-canvas { background: var(--px-color-bg-canvas); min-height: 100vh; }
+.px-surface { background: var(--px-color-bg-surface); border: 1px solid var(--px-color-border-subtle); border-radius: var(--px-radius-lg); box-shadow: var(--px-shadow-sm); }
+.px-eyebrow { color: var(--px-red-700); font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; }
+.px-muted { color: var(--px-color-text-secondary); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+}
 
 @media print {
   .no-print { display: none !important; }
