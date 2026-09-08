@@ -45,8 +45,7 @@ export async function GET() {
       return NextResponse.json({ ok: false, error: "Tidak ada Buffer organization pada API key ini." }, { status: 404 });
     }
 
-    const organization = organizations[0];
-    const channelData = await bufferRequest(`
+    const channelQuery = `
       query BufferChannels($organizationId: OrganizationId!) {
         channels(input: { organizationId: $organizationId }) {
           id
@@ -61,16 +60,36 @@ export async function GET() {
           timezone
         }
       }
-    `, { organizationId: organization.id });
+    `;
 
-    const channels = (channelData?.channels ?? []).filter(
-      (channel: any) => channel.service === "instagram" && !channel.isDisconnected && !channel.isLocked,
+    const organizationResults = await Promise.all(
+      organizations.map(async (organization: { id: string; name: string }) => {
+        const channelData = await bufferRequest(channelQuery, { organizationId: organization.id });
+        const channels = (channelData?.channels ?? [])
+          .filter((channel: any) => String(channel.service).toLowerCase() === "instagram")
+          .filter((channel: any) => !channel.isDisconnected && !channel.isLocked)
+          .map((channel: any) => ({
+            ...channel,
+            organizationId: organization.id,
+            organizationName: organization.name,
+          }));
+        return channels;
+      }),
     );
+
+    const channels = organizationResults.flat();
 
     return NextResponse.json({
       ok: true,
-      organization: { id: organization.id, name: organization.name },
+      organizations: organizations.map((organization: { id: string; name: string }) => ({
+        id: organization.id,
+        name: organization.name,
+      })),
       channels,
+      diagnostics: {
+        organizationCount: organizations.length,
+        instagramChannelCount: channels.length,
+      },
     });
   } catch (error) {
     return NextResponse.json(
