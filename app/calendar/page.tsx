@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 
+import BufferChannelDiagnostics from "@/components/buffer-channel-diagnostics";
 import BufferInstagramPanel from "@/components/buffer-instagram-panel";
 import CalendarAssignmentBadges from "@/components/calendar-assignment-badges";
 import CalendarLegacyDesignLinkHider from "@/components/calendar-legacy-design-link-hider";
@@ -17,6 +18,7 @@ export default function CalendarPage() {
       <TaskAssignmentPanel />
       <CalendarAssignmentBadges />
       <BufferInstagramPanel />
+      <BufferChannelDiagnostics />
       <CalendarLegacyDesignLinkHider />
     </Suspense>
   );
