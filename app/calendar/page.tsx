@@ -1,9 +1,10 @@
 import { Suspense } from "react";
 
 import BufferInstagramPanel from "@/components/buffer-instagram-panel";
+import CalendarAssignmentBadges from "@/components/calendar-assignment-badges";
+import CalendarLegacyDesignLinkHider from "@/components/calendar-legacy-design-link-hider";
 import CalendarExpansionClient from "@/components/pages/calendar-expansion-client";
 import TaskAssignmentPanel from "@/components/task-assignment-panel";
-import CalendarAssignmentBadges from "@/components/calendar-assignment-badges";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,7 @@ export default function CalendarPage() {
       <TaskAssignmentPanel />
       <CalendarAssignmentBadges />
       <BufferInstagramPanel />
+      <CalendarLegacyDesignLinkHider />
     </Suspense>
   );
 }
