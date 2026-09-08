@@ -86,11 +86,16 @@ export async function POST(request: Request) {
           input: {
             text,
             channelId,
-            type: instagramPostType,
             schedulingType: "automatic",
             mode: "customScheduled",
             dueAt,
             assets: [asset],
+            metadata: {
+              instagram: {
+                type: instagramPostType,
+                shouldShareToFeed: true,
+              },
+            },
             source: "smm-simplified",
           },
         },
