@@ -35,6 +35,7 @@ export async function POST(request: Request) {
   const text = body.text?.trim() || "";
   const mediaUrl = body.mediaUrl?.trim();
   const mediaType = body.mediaType === "video" ? "video" : "image";
+  const instagramPostType = mediaType === "video" ? "reel" : "post";
   const dueAt = body.dueAt?.trim();
 
   if (!channelId) return NextResponse.json({ ok: false, error: "Channel Instagram Buffer belum dipilih." }, { status: 400 });
@@ -85,6 +86,7 @@ export async function POST(request: Request) {
           input: {
             text,
             channelId,
+            type: instagramPostType,
             schedulingType: "automatic",
             mode: "customScheduled",
             dueAt,
