@@ -44,3 +44,18 @@ Content Expansion safety rules:
 - LinkedIn and SEO derivatives have their own editable draft, Alignment Check, and Human QC status.
 - Existing business-table RLS is not changed.
 - The new table uses temporary authenticated-workspace policies consistent with current workspace-wide enforcement being OFF; brand-level isolation remains a later access-control phase.
+
+BUFFER / INSTAGRAM PUBLISHER MEDIA
+
+Run this additive SQL file once before testing direct media upload from Calendar:
+  database/BUFFER_PUBLISHER_STORAGE.sql
+
+It creates one dedicated public Supabase Storage bucket:
+  smm-publisher-media
+
+Publisher Storage safety rules:
+- It does not create, alter, or drop any SMM business table.
+- It does not modify Combined tables or Combined-specific RLS.
+- Authenticated users can write only inside their own user-id folder.
+- Media is public-read because Buffer/Instagram must be able to fetch the scheduled image/video.
+- Allowed formats: JPG, PNG, WEBP, MP4, MOV; maximum file size 50 MB.
