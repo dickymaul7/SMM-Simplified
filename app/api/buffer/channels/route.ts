@@ -33,7 +33,7 @@ export async function GET() {
 
   try {
     const account = await bufferRequest(`
-      query BufferOrganizations {
+      query GetOrganizations {
         account {
           organizations {
             id
@@ -49,20 +49,17 @@ export async function GET() {
       return NextResponse.json({ ok: false, error: "Tidak ada Buffer organization pada API key ini." }, { status: 404 });
     }
 
+    // Keep this query intentionally aligned with Buffer's documented Get Channels
+    // example. Avoid extra fields while diagnosing channel discovery.
     const channelQuery = `
-      query BufferChannels($organizationId: OrganizationId!) {
+      query GetChannels($organizationId: OrganizationId!) {
         channels(input: { organizationId: $organizationId }) {
           id
           name
           displayName
           service
-          descriptor
-          externalLink
           avatar
           isQueuePaused
-          isDisconnected
-          isLocked
-          timezone
         }
       }
     `;
@@ -78,11 +75,7 @@ export async function GET() {
       }),
     );
 
-    // Deliberately return every channel Buffer exposes here. The publisher UI can
-    // still let Buffer reject an unavailable channel, but we must not hide a valid
-    // connected profile because of a transient locked/disconnected flag.
     const channels = organizationResults.flat();
-    const activeChannels = channels.filter((channel: any) => !channel.isDisconnected && !channel.isLocked);
 
     return NextResponse.json({
       ok: true,
@@ -99,16 +92,7 @@ export async function GET() {
           0,
         ),
         returnedChannelCount: channels.length,
-        activeChannelCount: activeChannels.length,
         services: Array.from(new Set(channels.map((channel: any) => String(channel.service || "unknown")))),
-        unavailableChannels: channels
-          .filter((channel: any) => channel.isDisconnected || channel.isLocked)
-          .map((channel: any) => ({
-            id: channel.id,
-            name: channel.displayName || channel.name,
-            isDisconnected: Boolean(channel.isDisconnected),
-            isLocked: Boolean(channel.isLocked),
-          })),
       },
     });
   } catch (error) {
