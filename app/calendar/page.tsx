@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 
+import BufferInstagramPanel from "@/components/buffer-instagram-panel";
 import CalendarExpansionClient from "@/components/pages/calendar-expansion-client";
 import TaskAssignmentPanel from "@/components/task-assignment-panel";
 import CalendarAssignmentBadges from "@/components/calendar-assignment-badges";
@@ -12,6 +13,7 @@ export default function CalendarPage() {
       <CalendarExpansionClient />
       <TaskAssignmentPanel />
       <CalendarAssignmentBadges />
+      <BufferInstagramPanel />
     </Suspense>
   );
 }
