@@ -52,7 +52,8 @@ export async function GET() {
           name
           displayName
           service
-          type
+          descriptor
+          externalLink
           avatar
           isQueuePaused
           isDisconnected
@@ -65,15 +66,13 @@ export async function GET() {
     const organizationResults = await Promise.all(
       organizations.map(async (organization: { id: string; name: string }) => {
         const channelData = await bufferRequest(channelQuery, { organizationId: organization.id });
-        const channels = (channelData?.channels ?? [])
-          .filter((channel: any) => String(channel.service).toLowerCase() === "instagram")
+        return (channelData?.channels ?? [])
           .filter((channel: any) => !channel.isDisconnected && !channel.isLocked)
           .map((channel: any) => ({
             ...channel,
             organizationId: organization.id,
             organizationName: organization.name,
           }));
-        return channels;
       }),
     );
 
@@ -88,7 +87,8 @@ export async function GET() {
       channels,
       diagnostics: {
         organizationCount: organizations.length,
-        instagramChannelCount: channels.length,
+        activeChannelCount: channels.length,
+        services: Array.from(new Set(channels.map((channel: any) => String(channel.service || "unknown")))),
       },
     });
   } catch (error) {
