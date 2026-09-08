@@ -35,7 +35,11 @@ export async function GET() {
     const account = await bufferRequest(`
       query BufferOrganizations {
         account {
-          organizations { id name }
+          organizations {
+            id
+            name
+            channelCount
+          }
         }
       }
     `);
@@ -64,31 +68,47 @@ export async function GET() {
     `;
 
     const organizationResults = await Promise.all(
-      organizations.map(async (organization: { id: string; name: string }) => {
+      organizations.map(async (organization: { id: string; name: string; channelCount?: number }) => {
         const channelData = await bufferRequest(channelQuery, { organizationId: organization.id });
-        return (channelData?.channels ?? [])
-          .filter((channel: any) => !channel.isDisconnected && !channel.isLocked)
-          .map((channel: any) => ({
-            ...channel,
-            organizationId: organization.id,
-            organizationName: organization.name,
-          }));
+        return (channelData?.channels ?? []).map((channel: any) => ({
+          ...channel,
+          organizationId: organization.id,
+          organizationName: organization.name,
+        }));
       }),
     );
 
+    // Deliberately return every channel Buffer exposes here. The publisher UI can
+    // still let Buffer reject an unavailable channel, but we must not hide a valid
+    // connected profile because of a transient locked/disconnected flag.
     const channels = organizationResults.flat();
+    const activeChannels = channels.filter((channel: any) => !channel.isDisconnected && !channel.isLocked);
 
     return NextResponse.json({
       ok: true,
-      organizations: organizations.map((organization: { id: string; name: string }) => ({
+      organizations: organizations.map((organization: { id: string; name: string; channelCount?: number }) => ({
         id: organization.id,
         name: organization.name,
+        channelCount: organization.channelCount ?? null,
       })),
       channels,
       diagnostics: {
         organizationCount: organizations.length,
-        activeChannelCount: channels.length,
+        declaredChannelCount: organizations.reduce(
+          (total: number, organization: { channelCount?: number }) => total + Number(organization.channelCount || 0),
+          0,
+        ),
+        returnedChannelCount: channels.length,
+        activeChannelCount: activeChannels.length,
         services: Array.from(new Set(channels.map((channel: any) => String(channel.service || "unknown")))),
+        unavailableChannels: channels
+          .filter((channel: any) => channel.isDisconnected || channel.isLocked)
+          .map((channel: any) => ({
+            id: channel.id,
+            name: channel.displayName || channel.name,
+            isDisconnected: Boolean(channel.isDisconnected),
+            isLocked: Boolean(channel.isLocked),
+          })),
       },
     });
   } catch (error) {
