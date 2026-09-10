@@ -5,8 +5,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 export const dynamic = "force-dynamic";
 
 const BUFFER_ENDPOINT = "https://api.buffer.com";
-
-type Metric = { type: string; name?: string | null; value: number | string | null; unit?: string | null };
+const FREE_PLAN_HISTORY_DAYS = 31;
 
 type Channel = {
   id: string;
@@ -67,7 +66,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const requestedDays = Number(request.nextUrl.searchParams.get("days") || 30);
-    const days = [7, 30, 90].includes(requestedDays) ? requestedDays : 30;
+    const days = [7, 14, 30].includes(requestedDays) ? requestedDays : 30;
     const requestedChannelId = request.nextUrl.searchParams.get("channelId") || "";
 
     const account = await bufferRequest(`
@@ -109,6 +108,24 @@ export async function GET(request: NextRequest) {
 
     const selectedChannel = channels.find((channel) => channel.id === requestedChannelId) ?? channels[0];
     const range = dateWindow(days);
+    const comparisonAvailable = days * 2 <= FREE_PLAN_HISTORY_DAYS;
+
+    const comparisonFields = comparisonAvailable ? `
+        previous: aggregatedPostMetrics(input: {
+          organizationId: $organizationId
+          channelIds: $channelIds
+          startDateTime: $previousStart
+          endDateTime: $previousEnd
+        }) {
+          metrics { type name value unit }
+          metricsUpdatedAt
+        }
+    ` : "";
+
+    const comparisonVars = comparisonAvailable ? `
+        $previousStart: DateTime!
+        $previousEnd: DateTime!
+    ` : "";
 
     const query = `
       query Analytics(
@@ -116,8 +133,7 @@ export async function GET(request: NextRequest) {
         $channelIds: [ChannelId!]
         $currentStart: DateTime!
         $currentEnd: DateTime!
-        $previousStart: DateTime!
-        $previousEnd: DateTime!
+        ${comparisonVars}
       ) {
         current: aggregatedPostMetrics(input: {
           organizationId: $organizationId
@@ -128,15 +144,7 @@ export async function GET(request: NextRequest) {
           metrics { type name value unit }
           metricsUpdatedAt
         }
-        previous: aggregatedPostMetrics(input: {
-          organizationId: $organizationId
-          channelIds: $channelIds
-          startDateTime: $previousStart
-          endDateTime: $previousEnd
-        }) {
-          metrics { type name value unit }
-          metricsUpdatedAt
-        }
+        ${comparisonFields}
         posts(
           first: 100
           input: {
@@ -167,22 +175,32 @@ export async function GET(request: NextRequest) {
       }
     `;
 
-    const data = await bufferRequest(query, {
+    const variables: Record<string, unknown> = {
       organizationId: selectedChannel.organizationId,
       channelIds: [selectedChannel.id],
-      ...range,
-    });
+      currentStart: range.currentStart,
+      currentEnd: range.currentEnd,
+    };
+    if (comparisonAvailable) {
+      variables.previousStart = range.previousStart;
+      variables.previousEnd = range.previousEnd;
+    }
+
+    const data = await bufferRequest(query, variables);
 
     return NextResponse.json({
       ok: true,
       days,
       range,
+      comparisonAvailable,
       channels,
       selectedChannel,
       current: data?.current ?? { metrics: [], metricsUpdatedAt: null },
-      previous: data?.previous ?? { metrics: [], metricsUpdatedAt: null },
+      previous: comparisonAvailable ? (data?.previous ?? { metrics: [], metricsUpdatedAt: null }) : { metrics: [], metricsUpdatedAt: null },
       posts: (data?.posts?.edges ?? []).map((edge: { node: unknown }) => edge.node),
-      note: "Buffer metrics diperbarui harian dan dapat tertinggal hingga sekitar 24 jam dari social network sumber.",
+      note: comparisonAvailable
+        ? "Buffer metrics diperbarui harian dan dapat tertinggal hingga sekitar 24 jam dari social network sumber."
+        : "Paket Buffer saat ini hanya menyediakan sekitar 31 hari history. Data 30 hari tetap ditampilkan, tetapi perbandingan 30 hari sebelumnya dinonaktifkan.",
     });
   } catch (error) {
     return NextResponse.json(
