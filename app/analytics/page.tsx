@@ -1,7 +1,7 @@
-import WorkspacePlaceholder from "@/components/pages/workspace-placeholder";
+import AnalyticsClient from "@/components/pages/analytics-client";
 
 export const dynamic = "force-dynamic";
 
 export default function AnalyticsPage() {
-  return <WorkspacePlaceholder kind="analytics" />;
+  return <AnalyticsClient />;
 }
