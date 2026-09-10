@@ -13,6 +13,7 @@ type AnalyticsPayload = {
   error?: string;
   days: number;
   range: { currentStart: string; currentEnd: string; previousStart: string; previousEnd: string };
+  comparisonAvailable?: boolean;
   channels: Channel[];
   selectedChannel: Channel;
   current: { metrics: Metric[]; metricsUpdatedAt?: string | null };
@@ -133,6 +134,8 @@ export default function AnalyticsClient() {
     return preferredMetricOrder.filter((type) => available.has(type));
   }, [data]);
 
+  const comparisonAvailable = Boolean(data?.comparisonAvailable);
+
   return <AuthGuard>
     <AppHeader />
     <main className="app-workspace px-5 py-8 lg:px-8 lg:py-9">
@@ -149,8 +152,8 @@ export default function AnalyticsClient() {
             </select>
             <select className="ui-input" value={days} onChange={(event) => setDays(Number(event.target.value))}>
               <option value={7}>Last 7 days</option>
+              <option value={14}>Last 14 days</option>
               <option value={30}>Last 30 days</option>
-              <option value={90}>Last 90 days</option>
             </select>
           </div>
         </header>
@@ -161,14 +164,18 @@ export default function AnalyticsClient() {
           <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="text-lg font-bold tracking-tight text-slate-900">Summary</h2>
-              <p className="mt-1 text-sm text-slate-500">{data ? `${formatDate(data.range.currentStart)} – ${formatDate(data.range.currentEnd)} · Compared with previous ${data.days} days` : "Loading performance period…"}</p>
+              <p className="mt-1 text-sm text-slate-500">
+                {data
+                  ? `${formatDate(data.range.currentStart)} – ${formatDate(data.range.currentEnd)}${comparisonAvailable ? ` · Compared with previous ${data.days} days` : ""}`
+                  : "Loading performance period…"}
+              </p>
             </div>
             {data?.current.metricsUpdatedAt && <span className="ui-badge ui-badge-neutral">Updated {formatDate(data.current.metricsUpdatedAt)}</span>}
           </div>
 
           {loading && !data ? <div className="grid min-h-48 place-items-center text-sm text-slate-500">Loading Buffer analytics…</div> : <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             {visibleTypes.map((type) => {
-              const change = delta(current.get(type), previous.get(type));
+              const change = comparisonAvailable ? delta(current.get(type), previous.get(type)) : null;
               return <article key={type} className="rounded-xl border border-slate-200 bg-white p-4">
                 <div className="text-xs font-semibold text-slate-500">{metricLabels[type] || current.get(type)?.name || type}</div>
                 <div className="mt-2 flex items-end gap-2">
@@ -181,7 +188,7 @@ export default function AnalyticsClient() {
           </div>}
 
           <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-500">
-            Total Followers belum tersedia sebagai field analytics pada Buffer API saat ini. Metric lain dapat berbeda per social network. Buffer memperbarui post metrics sekitar sekali per hari.
+            {data?.note || "Metric dapat berbeda per social network. Buffer memperbarui post metrics sekitar sekali per hari."}
           </div>
         </section>
 
